@@ -246,8 +246,18 @@ def create_folium_map(zones_evaluated, teams=None, highlight_zone_id=None):
 # ===========================================================================
 
 if nav_option == "1. Command Center":
-    st.markdown("## 🚨 Emergency Command Center")
-    st.caption("Live operational intelligence, zone vulnerability overview, and priority incident queue.")
+    rain_label = f"{st.session_state['simulated_rain_mm']:.0f} mm" if st.session_state["use_simulation"] else "Open-Meteo feed"
+    source_label = "SIMULATION" if st.session_state["use_simulation"] else "WEATHER FEED"
+    st.markdown(
+        f"""
+        <section class="ops-hero">
+          <div class="ops-hero-top"><span class="ops-kicker">FLOODIQ · HYDERABAD PILOT</span><span class="ops-live"><i></i> {source_label}</span></div>
+          <div class="ops-hero-main"><div><h1>Emergency operations</h1><p>Turn local risk signals into a clear, operator-approved response.</p></div>
+          <div class="ops-rain"><span>Scenario rainfall</span><strong>{rain_label}</strong><small>Illustrative risk simulation</small></div></div>
+        </section>
+        """,
+        unsafe_allow_html=True,
+    )
 
     # High-level KPIs
     incidents = list_incidents()
@@ -262,14 +272,12 @@ if nav_option == "1. Command Center":
     resolved_incidents = len([i for i in incidents if i["status"] == "Resolved"])
 
     # KPI Metric Row
-    kpi1, kpi2, kpi3, kpi4, kpi5, kpi6, kpi7 = st.columns(7)
-    kpi1.metric("Monitored Zones", f"{total_zones}")
-    kpi2.metric("High/Crit Risk Zones", f"{high_risk_zones}", delta="Escalated" if high_risk_zones > 0 else "Normal", delta_color="inverse")
-    kpi3.metric("Active Incidents", f"{active_incidents}")
-    kpi4.metric("Critical Incidents", f"{critical_incidents}", delta="Urgent" if critical_incidents > 0 else "Clear", delta_color="inverse")
-    kpi5.metric("Available Teams", f"{avail_teams}")
-    kpi6.metric("Assigned Teams", f"{assigned_teams}")
-    kpi7.metric("Resolved", f"{resolved_incidents}")
+    kpi1, kpi2, kpi3, kpi4, kpi5 = st.columns(5)
+    kpi1.metric("Pilot zones", f"{total_zones}")
+    kpi2.metric("Elevated risk", f"{high_risk_zones}", delta="High / critical", delta_color="inverse")
+    kpi3.metric("Open incidents", f"{active_incidents}")
+    kpi4.metric("Critical priority", f"{critical_incidents}", delta="Needs review" if critical_incidents else "Clear", delta_color="inverse")
+    kpi5.metric("Teams available", f"{avail_teams}", delta=f"{assigned_teams} assigned")
 
     st.markdown("---")
 
@@ -281,7 +289,7 @@ if nav_option == "1. Command Center":
         sim_badge = "Simulated" if st.session_state["use_simulation"] else "Live Open-Meteo"
         st.caption(f"Weather Data Source: **{sim_badge}** | Active Rainfall: **{st.session_state['simulated_rain_mm'] if st.session_state['use_simulation'] else 'Live'} mm**")
         fmap = create_folium_map(evaluated_zones, teams)
-        st_folium(fmap, height=430, use_container_width=True)
+        st_folium(fmap, height=390, use_container_width=True)
 
     with col_queue:
         st.markdown("#### ⚡ Priority Incident Queue (Vulnerability-First)")
@@ -326,7 +334,7 @@ if nav_option == "1. Command Center":
 
 elif nav_option == "2. Predict — Flood Risk":
     st.markdown("## 🔍 Predict: Flood Risk Intelligence")
-    st.caption("Transparent hydrological risk heuristic based on real-time rainfall, drainage capacity, and low-lying vulnerability.")
+    st.caption("Illustrative scenario risk scoring, not a validated flood forecast. Scores combine rainfall input, drainage capacity, and low-lying vulnerability.")
 
     # Formula Callout
     with st.expander("📐 Explainable Risk Formula & Heuristic Model", expanded=True):
