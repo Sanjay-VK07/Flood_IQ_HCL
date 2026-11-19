@@ -1,0 +1,110 @@
+{
+    "Low": {
+        "title": "Normal Monitoring",
+        "actions": [
+            {
+                "action": "Monitor rainfall forecasts and weather updates",
+                "reason": "Early awareness enables timely preparation if conditions worsen"
+            },
+            {
+                "action": "Review local drainage and waterlogging reports",
+                "reason": "Baseline situational awareness of infrastructure condition"
+            },
+            {
+                "action": "Ensure emergency contact lists are up to date",
+                "reason": "Preparedness measure to reduce response delay if escalation occurs"
+            },
+            {
+                "action": "Check battery levels on communication equipment",
+                "reason": "Communication readiness is foundational for any emergency response"
+            }
+        ]
+    },
+    "Moderate": {
+        "title": "Elevated Preparedness",
+        "actions": [
+            {
+                "action": "Inspect storm drain conditions in the zone",
+                "reason": "Moderate rainfall can overwhelm partially blocked drains, causing localized flooding"
+            },
+            {
+                "action": "Check emergency response equipment availability",
+                "reason": "Equipment readiness reduces deployment time if the situation escalates"
+            },
+            {
+                "action": "Alert local emergency coordination personnel",
+                "reason": "Early notification enables faster mobilization if intervention is needed"
+            },
+            {
+                "action": "Review zone-specific vulnerability data",
+                "reason": "Understanding local risk factors helps prioritize response if conditions deteriorate"
+            },
+            {
+                "action": "Identify potential temporary shelter locations",
+                "reason": "Pre-identification avoids delay if temporary relocation becomes necessary"
+            }
+        ]
+    },
+    "High": {
+        "title": "Active Preparedness",
+        "actions": [
+            {
+                "action": "Review vulnerable infrastructure in the affected zone",
+                "reason": "High rainfall significantly increases risk of structural waterlogging and access disruption"
+            },
+            {
+                "action": "Place response teams on standby readiness",
+                "reason": "Reducing mobilization time is critical when conditions may escalate rapidly"
+            },
+            {
+                "action": "Actively monitor citizen reports from the zone",
+                "reason": "Citizen reports are often the first indicator of on-ground emergencies"
+            },
+            {
+                "action": "Verify safe access and egress routes",
+                "reason": "Flooded roads can cut off evacuation and response access unexpectedly"
+            },
+            {
+                "action": "Coordinate with medical response units",
+                "reason": "Medical emergencies increase during high-rainfall events due to waterborne hazards and injuries"
+            },
+            {
+                "action": "Pre-position rescue boats if available",
+                "reason": "Water rescue equipment must be staged before roads become impassable"
+            }
+        ]
+    },
+    "Critical": {
+        "title": "Emergency Operations",
+        "actions": [
+            {
+                "action": "Escalate continuous monitoring of all zone indicators",
+                "reason": "Critical conditions require real-time situational awareness to prevent loss of life"
+            },
+            {
+                "action": "Prioritize verified emergency reports for immediate review",
+                "reason": "Report volume increases during critical events; triage prevents resource misallocation"
+            },
+            {
+                "action": "Deploy available response resources to staging areas",
+                "reason": "Pre-deployment reduces response time for imminent rescue operations"
+            },
+            {
+                "action": "Notify the responsible human operator / incident commander",
+                "reason": "Critical situations require command-level oversight and decision authority"
+            },
+            {
+                "action": "Activate backup communication channels",
+                "reason": "Primary communication infrastructure may fail during severe flooding"
+            },
+            {
+                "action": "Coordinate with district emergency operations center",
+                "reason": "Cross-agency coordination is essential when local capacity may be exceeded"
+            },
+            {
+                "action": "Document all actions and decisions for post-event review",
+                "reason": "Accountability and learning require a clear record of emergency response decisions"
+            }
+        ]
+    }
+}

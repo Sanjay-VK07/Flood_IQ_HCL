@@ -1,0 +1,87 @@
+{
+    "response_teams": [
+        {
+            "team_id": "wrt_01",
+            "team_name": "Water Rescue Alpha",
+            "specialty": "Water Rescue",
+            "base_zone": "khairatabad",
+            "latitude": 17.4100,
+            "longitude": 78.4700,
+            "status": "Available"
+        },
+        {
+            "team_id": "wrt_02",
+            "team_name": "Water Rescue Bravo",
+            "specialty": "Water Rescue",
+            "base_zone": "musi_riverfront",
+            "latitude": 17.3750,
+            "longitude": 78.4850,
+            "status": "Available"
+        },
+        {
+            "team_id": "mrt_01",
+            "team_name": "Medical Response Unit 1",
+            "specialty": "Medical Emergency",
+            "base_zone": "begumpet",
+            "latitude": 17.4420,
+            "longitude": 78.5000,
+            "status": "Available"
+        },
+        {
+            "team_id": "get_01",
+            "team_name": "General Emergency Team 1",
+            "specialty": "General Emergency",
+            "base_zone": "ameerpet",
+            "latitude": 17.4380,
+            "longitude": 78.4500,
+            "status": "Available"
+        },
+        {
+            "team_id": "get_02",
+            "team_name": "General Emergency Team 2",
+            "specialty": "General Emergency",
+            "base_zone": "kukatpally",
+            "latitude": 17.4860,
+            "longitude": 78.3900,
+            "status": "Available"
+        }
+    ],
+    "demo_incidents": [
+        {
+            "zone_id": "musi_riverfront",
+            "description": "Heavy rain has caused water to enter a residential building near the Musi Riverfront. Three people are stranded on the first floor, including an elderly person. Water levels are continuing to rise.",
+            "location_text": "Residential colony near Musi River bridge, Chaderghat",
+            "reported_category": "Water Rescue",
+            "people_affected": 3,
+            "ai_category": "Water Rescue",
+            "ai_urgency": "Critical",
+            "vulnerable_flag": true,
+            "vulnerable_group": "Elderly people",
+            "stranded": true,
+            "unable_to_evacuate": true,
+            "immediate_hazard": true,
+            "ai_rationale": "Three people including an elderly individual are stranded in a building with rising water levels. The situation involves active flooding, inability to self-evacuate, and a vulnerable person — all indicators of a critical water rescue emergency.",
+            "triage_mode": "seeded",
+            "priority_score": 92,
+            "status": "Triaged"
+        },
+        {
+            "zone_id": "ameerpet",
+            "description": "Road near Ameerpet metro station is partially waterlogged after heavy rain. Traffic is affected but no vehicles are stuck. Some pedestrians are wading through ankle-deep water.",
+            "location_text": "Main road near Ameerpet Metro Station",
+            "reported_category": "Road Blockage",
+            "people_affected": 0,
+            "ai_category": "Road Blockage",
+            "ai_urgency": "Medium",
+            "vulnerable_flag": false,
+            "vulnerable_group": "None reported",
+            "stranded": false,
+            "unable_to_evacuate": false,
+            "immediate_hazard": false,
+            "ai_rationale": "Partial road waterlogging causing traffic disruption. No people are stranded or trapped. Water is ankle-deep, posing inconvenience rather than immediate danger. No vulnerable individuals reported.",
+            "triage_mode": "seeded",
+            "priority_score": 48,
+            "status": "Triaged"
+        }
+    ]
+}

@@ -1,0 +1,47 @@
+[
+    {
+        "zone_id": "begumpet",
+        "zone_name": "Begumpet",
+        "latitude": 17.4400,
+        "longitude": 78.4983,
+        "drainage_score": 45,
+        "low_lying_score": 35,
+        "description": "Commercial and residential area near Hussain Sagar Lake. Moderate drainage infrastructure with some low-lying pockets prone to waterlogging during heavy rainfall."
+    },
+    {
+        "zone_id": "khairatabad",
+        "zone_name": "Khairatabad",
+        "latitude": 17.4062,
+        "longitude": 78.4691,
+        "drainage_score": 55,
+        "low_lying_score": 50,
+        "description": "Dense urban zone adjacent to Hussain Sagar. Aging storm drains and proximity to the lake make it vulnerable to overflow during sustained rainfall events."
+    },
+    {
+        "zone_id": "ameerpet",
+        "zone_name": "Ameerpet",
+        "latitude": 17.4375,
+        "longitude": 78.4483,
+        "drainage_score": 50,
+        "low_lying_score": 40,
+        "description": "Major commercial hub with high impervious surface coverage. Storm drainage capacity is limited relative to catchment area, causing surface flooding in heavy rain."
+    },
+    {
+        "zone_id": "kukatpally",
+        "zone_name": "Kukatpally",
+        "latitude": 17.4849,
+        "longitude": 78.3883,
+        "drainage_score": 60,
+        "low_lying_score": 55,
+        "description": "Rapidly urbanized residential area with encroachment on natural drainage channels. Significant waterlogging history during monsoon season."
+    },
+    {
+        "zone_id": "musi_riverfront",
+        "zone_name": "Musi Riverfront",
+        "latitude": 17.3700,
+        "longitude": 78.4800,
+        "drainage_score": 75,
+        "low_lying_score": 80,
+        "description": "Low-lying area along the Musi River. Highest flood vulnerability among pilot zones due to riverine proximity, poor drainage, and dense informal settlements."
+    }
+]
