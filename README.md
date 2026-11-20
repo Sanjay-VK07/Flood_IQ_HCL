@@ -1,8 +1,10 @@
-# FloodIQ — AI-Powered Urban Flood Intelligence & Emergency Response
+# FloodIQ Disaster Management Platform
+
+**AI-Assisted Urban Flood Intelligence & Emergency Response Coordination**
 
 > **Prototype Disclaimer**: This is a hackathon prototype. Zone risk scores use an
 > explainable heuristic, not a validated hydrological model. Response teams and their
-> locations are illustrative demonstration data. AI assists with incident interpretation,
+> locations are illustrative demonstration data. Groq AI assists with incident interpretation,
 > but human operators control all assignments.
 
 ## Quick Start
@@ -21,12 +23,19 @@ pip install -r requirements.txt
 
 # 4. Configure environment
 cp .env.example .env
-# Edit .env and add your GEMINI_API_KEY (optional — deterministic fallback works without it)
+# Edit .env and add your GROQ_API_KEY and GROQ_MODEL (optional — deterministic fallback works without it)
+# Optional: set CORS_ORIGINS=http://localhost:3000 for custom frontend origins
+# Frontend: copy frontend/.env.example to frontend/.env.local if API is not on localhost:8000
 
-# 5. Run the application (opens at http://localhost:8501)
-streamlit run app.py
+# 5. Run the FastAPI backend (http://localhost:8000, docs at /docs, health at /health)
+uvicorn api:app --host 0.0.0.0 --port 8000
 
-# 6. Run tests
+# 6. Run the Next.js frontend (in a second terminal, http://localhost:3000)
+cd frontend
+npm install
+npm run dev
+
+# 7. Run backend tests
 pytest tests/ -v
 ```
 

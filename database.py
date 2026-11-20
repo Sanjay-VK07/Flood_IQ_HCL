@@ -11,7 +11,9 @@ writing raw SQL.
 
 from __future__ import annotations
 
+import hashlib
 import json
+import secrets
 import sqlite3
 import uuid
 from datetime import datetime, timezone
@@ -93,12 +95,28 @@ CREATE TABLE IF NOT EXISTS incidents (
 
     -- Workflow
     status              TEXT NOT NULL DEFAULT 'New'
-        CHECK(status IN ('New', 'Triaged', 'In Review', 'Team Assigned', 'In Progress', 'Resolved')),
+        CHECK(status IN ('New', 'Triaged', 'In Review', 'Team Assigned', 'Acknowledged', 'In Progress', 'Resolved')),
     assigned_team_id    TEXT DEFAULT NULL REFERENCES response_teams(team_id),
+
+    -- Multi-role ownership & guest tracking
+    created_by_user_id  TEXT DEFAULT NULL,
+    reporter_type       TEXT NOT NULL DEFAULT 'guest' CHECK(reporter_type IN ('authenticated', 'guest', 'seeded')),
+    tracking_code       TEXT DEFAULT NULL,
+    photo_data_url      TEXT DEFAULT NULL,
 
     -- Timestamps
     created_at          TEXT NOT NULL,
     updated_at          TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS users (
+    user_id         TEXT PRIMARY KEY,
+    email           TEXT NOT NULL UNIQUE,
+    full_name       TEXT NOT NULL,
+    role            TEXT NOT NULL CHECK(role IN ('citizen', 'authority', 'response_team')),
+    team_id         TEXT DEFAULT NULL REFERENCES response_teams(team_id),
+    password_hash   TEXT NOT NULL,
+    created_at      TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS incident_updates (
@@ -113,15 +131,87 @@ CREATE TABLE IF NOT EXISTS incident_updates (
 """
 
 
+def _hash_password_pbkdf2(password: str) -> str:
+    salt_hex = secrets.token_hex(16)
+    dk = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt_hex.encode("utf-8"), 120_000)
+    return f"pbkdf2_sha256${salt_hex}${dk.hex()}"
+
+
+def _migrate_schema(conn: sqlite3.Connection) -> None:
+    """Safely upgrade existing incidents table if missing multi-role columns or Acknowledged status."""
+    row = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='incidents'"
+    ).fetchone()
+    if not row:
+        return
+    table_sql = row[0] or ""
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(incidents)").fetchall()}
+    needs_rebuild = ("created_by_user_id" not in cols) or ("'Acknowledged'" not in table_sql)
+    if not needs_rebuild:
+        return
+
+    conn.execute("PRAGMA foreign_keys = OFF")
+    conn.execute(
+        """CREATE TABLE incidents_new (
+            incident_id         TEXT PRIMARY KEY,
+            zone_id             TEXT NOT NULL REFERENCES zones(zone_id),
+            description         TEXT NOT NULL,
+            location_text       TEXT NOT NULL DEFAULT '',
+            reported_category   TEXT NOT NULL DEFAULT 'Other',
+            people_affected     INTEGER NOT NULL DEFAULT 0,
+            ai_category         TEXT DEFAULT NULL,
+            ai_urgency          TEXT DEFAULT NULL,
+            vulnerable_flag     INTEGER DEFAULT 0,
+            vulnerable_group    TEXT DEFAULT 'None reported',
+            stranded            INTEGER DEFAULT 0,
+            unable_to_evacuate  INTEGER DEFAULT 0,
+            immediate_hazard    INTEGER DEFAULT 0,
+            ai_rationale        TEXT DEFAULT '',
+            triage_mode         TEXT DEFAULT NULL CHECK(triage_mode IN ('ai', 'fallback', 'seeded', NULL)),
+            priority_score      REAL DEFAULT 0,
+            operator_priority   REAL DEFAULT NULL,
+            status              TEXT NOT NULL DEFAULT 'New'
+                CHECK(status IN ('New', 'Triaged', 'In Review', 'Team Assigned', 'Acknowledged', 'In Progress', 'Resolved')),
+            assigned_team_id    TEXT DEFAULT NULL REFERENCES response_teams(team_id),
+            created_by_user_id  TEXT DEFAULT NULL,
+            reporter_type       TEXT NOT NULL DEFAULT 'guest' CHECK(reporter_type IN ('authenticated', 'guest', 'seeded')),
+            tracking_code       TEXT DEFAULT NULL,
+            photo_data_url      TEXT DEFAULT NULL,
+            created_at          TEXT NOT NULL,
+            updated_at          TEXT NOT NULL
+        )"""
+    )
+    conn.execute(
+        """INSERT INTO incidents_new (
+               incident_id, zone_id, description, location_text, reported_category,
+               people_affected, ai_category, ai_urgency, vulnerable_flag,
+               vulnerable_group, stranded, unable_to_evacuate, immediate_hazard,
+               ai_rationale, triage_mode, priority_score, operator_priority,
+               status, assigned_team_id, reporter_type, created_at, updated_at
+           )
+           SELECT
+               incident_id, zone_id, description, location_text, reported_category,
+               people_affected, ai_category, ai_urgency, vulnerable_flag,
+               vulnerable_group, stranded, unable_to_evacuate, immediate_hazard,
+               ai_rationale, triage_mode, priority_score, operator_priority,
+               status, assigned_team_id, 'seeded', created_at, updated_at
+           FROM incidents"""
+    )
+    conn.execute("DROP TABLE incidents")
+    conn.execute("ALTER TABLE incidents_new RENAME TO incidents")
+    conn.execute("PRAGMA foreign_keys = ON")
+
+
 # ---------------------------------------------------------------------------
 # Initialization & seeding
 # ---------------------------------------------------------------------------
 
 def init_db(db_path: str | None = None) -> None:
-    """Create tables (idempotent) and seed data if tables are empty."""
+    """Create tables (idempotent), migrate existing schema safely, and seed data if empty."""
     conn = _get_connection(db_path)
     try:
         conn.executescript(_SCHEMA_SQL)
+        _migrate_schema(conn)
         _seed_if_empty(conn)
         conn.commit()
     finally:
@@ -156,20 +246,41 @@ def _seed_if_empty(conn: sqlite3.Connection) -> None:
                  t["latitude"], t["longitude"], t["status"]),
             )
 
+    # Seed demo users (idempotent)
+    user_count = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+    if user_count == 0:
+        now_u = _now_iso()
+        demo_users = [
+            ("usr_cit_01", "citizen@floodiq.demo", "Asha Reddy", "citizen", None, "Citizen@123"),
+            ("usr_cit_02", "citizen2@floodiq.demo", "Vikram Rao", "citizen", None, "Citizen@123"),
+            ("usr_auth_01", "authority@floodiq.demo", "Duty Officer Verma", "authority", None, "Authority@123"),
+            ("usr_team_wrt02", "bravo@floodiq.demo", "Water Rescue Bravo Lead", "response_team", "wrt_02", "Team@123"),
+            ("usr_team_wrt01", "alpha@floodiq.demo", "Water Rescue Alpha Lead", "response_team", "wrt_01", "Team@123"),
+        ]
+        for uid, email, name, role, team_id, pwd in demo_users:
+            conn.execute(
+                """INSERT INTO users (user_id, email, full_name, role, team_id, password_hash, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                (uid, email, name, role, team_id, _hash_password_pbkdf2(pwd), now_u),
+            )
+
     # Seed demo incidents
     incident_count = conn.execute("SELECT COUNT(*) FROM incidents").fetchone()[0]
     if incident_count == 0:
         seed = _load_json(SEED_DATA_PATH)
         now = _now_iso()
-        for inc in seed.get("demo_incidents", []):
+        for idx, inc in enumerate(seed.get("demo_incidents", [])):
             inc_id = _generate_incident_id()
+            owner_id = "usr_cit_01" if idx == 0 else "usr_cit_02"
+            trk_code = _generate_tracking_code()
             conn.execute(
                 """INSERT INTO incidents
                    (incident_id, zone_id, description, location_text, reported_category,
                     people_affected, ai_category, ai_urgency, vulnerable_flag,
                     vulnerable_group, stranded, unable_to_evacuate, immediate_hazard,
-                    ai_rationale, triage_mode, priority_score, status, created_at, updated_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    ai_rationale, triage_mode, priority_score, status,
+                    created_by_user_id, reporter_type, tracking_code, created_at, updated_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (inc_id, inc["zone_id"], inc["description"], inc["location_text"],
                  inc["reported_category"], inc["people_affected"],
                  inc["ai_category"], inc["ai_urgency"],
@@ -182,7 +293,7 @@ def _seed_if_empty(conn: sqlite3.Connection) -> None:
                  inc.get("triage_mode", "seeded"),
                  inc.get("priority_score", 0),
                  inc.get("status", "Triaged"),
-                 now, now),
+                 owner_id, "seeded", trk_code, now, now),
             )
             # Record initial triage update
             conn.execute(
@@ -217,11 +328,16 @@ def create_incident(payload: dict, db_path: str | None = None) -> str:
     Insert a new incident. Returns the generated incident_id.
 
     Required payload keys: zone_id, description
-    Optional: location_text, reported_category, people_affected, and all AI triage fields.
+    Optional: location_text, reported_category, people_affected, created_by_user_id,
+              reporter_type, tracking_code, photo_data_url, and all AI triage fields.
     """
     conn = _get_connection(db_path)
     inc_id = _generate_incident_id()
     now = _now_iso()
+    trk_code = payload.get("tracking_code") or _generate_tracking_code()
+    reporter_type = payload.get("reporter_type") or (
+        "authenticated" if payload.get("created_by_user_id") else "guest"
+    )
     try:
         conn.execute(
             """INSERT INTO incidents
@@ -229,8 +345,9 @@ def create_incident(payload: dict, db_path: str | None = None) -> str:
                 people_affected, ai_category, ai_urgency, vulnerable_flag,
                 vulnerable_group, stranded, unable_to_evacuate, immediate_hazard,
                 ai_rationale, triage_mode, priority_score, operator_priority,
-                status, assigned_team_id, created_at, updated_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                status, assigned_team_id, created_by_user_id, reporter_type,
+                tracking_code, photo_data_url, created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 inc_id,
                 payload["zone_id"],
@@ -251,6 +368,10 @@ def create_incident(payload: dict, db_path: str | None = None) -> str:
                 payload.get("operator_priority"),
                 payload.get("status", "New"),
                 payload.get("assigned_team_id"),
+                payload.get("created_by_user_id"),
+                reporter_type,
+                trk_code,
+                payload.get("photo_data_url"),
                 now,
                 now,
             ),
@@ -513,15 +634,18 @@ def reset_demo_data(db_path: str | None = None) -> None:
         # Re-seed demo incidents
         seed = _load_json(SEED_DATA_PATH)
         now = _now_iso()
-        for inc in seed.get("demo_incidents", []):
+        for idx, inc in enumerate(seed.get("demo_incidents", [])):
             inc_id = _generate_incident_id()
+            owner_id = "usr_cit_01" if idx == 0 else "usr_cit_02"
+            trk_code = _generate_tracking_code()
             conn.execute(
                 """INSERT INTO incidents
                    (incident_id, zone_id, description, location_text, reported_category,
                     people_affected, ai_category, ai_urgency, vulnerable_flag,
                     vulnerable_group, stranded, unable_to_evacuate, immediate_hazard,
-                    ai_rationale, triage_mode, priority_score, status, created_at, updated_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    ai_rationale, triage_mode, priority_score, status,
+                    created_by_user_id, reporter_type, tracking_code, created_at, updated_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (inc_id, inc["zone_id"], inc["description"], inc["location_text"],
                  inc["reported_category"], inc["people_affected"],
                  inc["ai_category"], inc["ai_urgency"],
@@ -534,7 +658,7 @@ def reset_demo_data(db_path: str | None = None) -> None:
                  inc.get("triage_mode", "seeded"),
                  inc.get("priority_score", 0),
                  inc.get("status", "Triaged"),
-                 now, now),
+                 owner_id, "seeded", trk_code, now, now),
             )
             conn.execute(
                 """INSERT INTO incident_updates
@@ -547,6 +671,66 @@ def reset_demo_data(db_path: str | None = None) -> None:
     except Exception:
         conn.rollback()
         raise
+    finally:
+        conn.close()
+
+
+# ---------------------------------------------------------------------------
+# Users & Role-Scoped Queries
+# ---------------------------------------------------------------------------
+
+def get_user_by_email(email: str, db_path: str | None = None) -> Optional[dict]:
+    conn = _get_connection(db_path)
+    try:
+        row = conn.execute(
+            "SELECT * FROM users WHERE lower(email) = lower(?)", (email.strip(),)
+        ).fetchone()
+        return dict(row) if row else None
+    finally:
+        conn.close()
+
+
+def get_user_by_id(user_id: str, db_path: str | None = None) -> Optional[dict]:
+    conn = _get_connection(db_path)
+    try:
+        row = conn.execute("SELECT * FROM users WHERE user_id = ?", (user_id,)).fetchone()
+        return dict(row) if row else None
+    finally:
+        conn.close()
+
+
+def list_incidents_for_citizen(user_id: str, db_path: str | None = None) -> list[dict]:
+    conn = _get_connection(db_path)
+    try:
+        rows = conn.execute(
+            "SELECT * FROM incidents WHERE created_by_user_id = ? ORDER BY created_at DESC",
+            (user_id,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        conn.close()
+
+
+def list_incidents_for_team(team_id: str, db_path: str | None = None) -> list[dict]:
+    conn = _get_connection(db_path)
+    try:
+        rows = conn.execute(
+            "SELECT * FROM incidents WHERE assigned_team_id = ? ORDER BY priority_score DESC, created_at ASC",
+            (team_id,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        conn.close()
+
+
+def get_incident_by_tracking(incident_id: str, tracking_code: str, db_path: str | None = None) -> Optional[dict]:
+    conn = _get_connection(db_path)
+    try:
+        row = conn.execute(
+            "SELECT * FROM incidents WHERE incident_id = ? AND tracking_code = ?",
+            (incident_id.strip().upper(), tracking_code.strip().upper()),
+        ).fetchone()
+        return dict(row) if row else None
     finally:
         conn.close()
 
@@ -569,6 +753,11 @@ def _now_iso() -> str:
 def _generate_incident_id() -> str:
     """Generate a short, human-friendly incident ID."""
     return f"FIQ-{uuid.uuid4().hex[:8].upper()}"
+
+
+def _generate_tracking_code() -> str:
+    """Generate a secure citizen tracking reference."""
+    return f"TRK-{secrets.token_hex(4).upper()}"
 
 
 def _generate_update_id() -> str:

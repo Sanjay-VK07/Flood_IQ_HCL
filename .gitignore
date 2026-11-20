@@ -22,9 +22,19 @@ env/
 
 # Environment variables
 .env
+frontend/.env
+frontend/.env.local
 
 # Database (generated at runtime)
 *.db
+*.db-wal
+*.db-shm
+
+# Next.js / Node
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+.verification_screenshots/
 
 # OS
 .DS_Store

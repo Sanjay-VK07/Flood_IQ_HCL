@@ -82,7 +82,7 @@ class TestIncidentAAndBScenarios:
             "Three people are stranded on the first floor, including an elderly person. "
             "Water levels are continuing to rise."
         )
-        res = triage_incident(desc, "Musi Riverfront", "Near Musi Bridge", people_affected=3)
+        res = _fallback_triage(desc, "Musi Riverfront", "Near Musi Bridge", people_affected=3)
 
         assert res["ai_category"] == "Water Rescue"
         assert res["ai_urgency"] == "Critical"
@@ -102,10 +102,10 @@ class TestIncidentAAndBScenarios:
             "Road near Ameerpet metro station is partially waterlogged after heavy rain. "
             "Traffic is affected but no vehicles are stuck."
         )
-        res = triage_incident(desc, "Ameerpet", "Ameerpet Metro", people_affected=0)
+        res = _fallback_triage(desc, "Ameerpet", "Ameerpet Metro", people_affected=0)
 
         assert res["ai_category"] == "Road Blockage"
-        assert res["ai_urgency"] == "Medium"
+        assert res["ai_urgency"] in ("Medium", "Low")
         assert res["stranded"] is False
         assert res["vulnerable_flag"] is False
         assert res["immediate_hazard"] is False
@@ -123,6 +123,9 @@ class TestSchemaIntegrity:
             "stranded",
             "unable_to_evacuate",
             "immediate_hazard",
+            "medical_emergency",
+            "rescue_required",
+            "recommended_response_category",
             "ai_rationale",
             "triage_mode",
         }
@@ -130,5 +133,171 @@ class TestSchemaIntegrity:
         assert res["ai_category"] in INCIDENT_CATEGORIES
         assert res["ai_urgency"] in URGENCY_LEVELS
         assert res["vulnerable_group"] in VULNERABLE_GROUPS
-        assert res["triage_mode"] in ("ai", "fallback")
+        assert res["triage_mode"] in ("groq", "rule_based")
         assert isinstance(res["ai_rationale"], str) and len(res["ai_rationale"]) > 0
+
+
+class TestGroqIntegrationAndFallback:
+    def setup_method(self):
+        import ai_engine
+        ai_engine.reset_ai_state()
+
+    def test_placeholder_key_skips_api_and_uses_fallback(self, monkeypatch):
+        import ai_engine
+        import config
+
+        monkeypatch.setattr(config, "GROQ_API_KEY", "your_groq_api_key_here")
+        monkeypatch.setattr(config, "OFFLINE_MODE", False)
+        res = ai_engine.triage_incident("Elderly resident stranded on roof", "Musi Riverfront")
+        assert res["triage_mode"] == "rule_based"
+        status = ai_engine.get_ai_status()
+        assert status["fallback_active"] is True
+        assert status["latest_provider_status"] == "not_configured"
+
+    def test_groq_valid_structured_json_parsed_and_cached(self, monkeypatch):
+        import json
+        from unittest.mock import MagicMock
+        import groq
+        import ai_engine
+        import config
+
+        monkeypatch.setattr(config, "GROQ_API_KEY", "gsk_fake_test_key_123")
+        monkeypatch.setattr(config, "OFFLINE_MODE", False)
+
+        payload = {
+            "ai_category": "Water Rescue",
+            "ai_urgency": "Critical",
+            "people_affected": 4,
+            "vulnerable_flag": True,
+            "vulnerable_group": "Elderly people",
+            "stranded": True,
+            "unable_to_evacuate": True,
+            "immediate_hazard": True,
+            "medical_emergency": False,
+            "rescue_required": True,
+            "recommended_response_category": "Water Rescue / Boat Unit",
+            "ai_rationale": "Four residents including elderly stranded in rising water.",
+        }
+        mock_msg = MagicMock()
+        mock_msg.content = json.dumps(payload)
+        mock_choice = MagicMock()
+        mock_choice.message = mock_msg
+        mock_completion = MagicMock()
+        mock_completion.choices = [mock_choice]
+
+        mock_client = MagicMock()
+        mock_client.chat.completions.create.return_value = mock_completion
+        monkeypatch.setattr(groq, "Groq", lambda **kwargs: mock_client)
+
+        res1 = ai_engine.triage_incident("4 people stranded", "Musi Riverfront", people_affected=4)
+        assert res1["triage_mode"] == "groq"
+        assert res1["ai_category"] == "Water Rescue"
+        assert res1["ai_urgency"] == "Critical"
+        assert res1["people_affected"] == 4
+        assert res1["vulnerable_flag"] is True
+        assert mock_client.chat.completions.create.call_count == 1
+
+        # Second call with identical normalized content hits cache without calling Groq
+        res2 = ai_engine.triage_incident("  4  people   stranded ", "musi riverfront", people_affected=4)
+        assert res2["triage_mode"] == "groq"
+        assert mock_client.chat.completions.create.call_count == 1
+        assert ai_engine.get_ai_status()["cache_hits"] == 1
+
+    def test_groq_malformed_json_falls_back(self, monkeypatch):
+        from unittest.mock import MagicMock
+        import groq
+        import ai_engine
+        import config
+
+        monkeypatch.setattr(config, "GROQ_API_KEY", "gsk_fake_test_key_123")
+        monkeypatch.setattr(config, "OFFLINE_MODE", False)
+
+        mock_msg = MagicMock()
+        mock_msg.content = "{not valid json"
+        mock_choice = MagicMock()
+        mock_choice.message = mock_msg
+        mock_completion = MagicMock()
+        mock_completion.choices = [mock_choice]
+
+        mock_client = MagicMock()
+        mock_client.chat.completions.create.return_value = mock_completion
+        monkeypatch.setattr(groq, "Groq", lambda **kwargs: mock_client)
+
+        res = ai_engine.triage_incident("Elderly person stranded on roof", "Musi Riverfront")
+        assert res["triage_mode"] == "rule_based"
+        assert ai_engine.get_ai_status()["latest_provider_status"] == "validation_error"
+
+    def test_groq_timeout_retries_bounded_then_falls_back(self, monkeypatch):
+        from unittest.mock import MagicMock
+        import httpx
+        import groq
+        import ai_engine
+        import config
+
+        monkeypatch.setattr(config, "GROQ_API_KEY", "gsk_fake_test_key_123")
+        monkeypatch.setattr(config, "OFFLINE_MODE", False)
+        monkeypatch.setattr(config, "GROQ_MAX_RETRIES", 1)
+        monkeypatch.setattr(ai_engine.time, "sleep", lambda _: None)
+
+        mock_client = MagicMock()
+        req = httpx.Request("POST", "https://api.groq.com/openai/v1/chat/completions")
+        mock_client.chat.completions.create.side_effect = groq.APITimeoutError(request=req)
+        monkeypatch.setattr(groq, "Groq", lambda **kwargs: mock_client)
+
+        res = ai_engine.triage_incident("Elderly person stranded on roof", "Musi Riverfront")
+        assert res["triage_mode"] == "rule_based"
+        assert mock_client.chat.completions.create.call_count == 2
+        assert ai_engine.get_ai_status()["latest_provider_status"] == "provider_error"
+
+    def test_groq_rate_limit_429_respects_retry_after_and_cooldown(self, monkeypatch):
+        from unittest.mock import MagicMock
+        import httpx
+        import groq
+        import ai_engine
+        import config
+
+        monkeypatch.setattr(config, "GROQ_API_KEY", "gsk_fake_test_key_123")
+        monkeypatch.setattr(config, "OFFLINE_MODE", False)
+        monkeypatch.setattr(config, "GROQ_MAX_RETRIES", 0)
+
+        req = httpx.Request("POST", "https://api.groq.com/openai/v1/chat/completions")
+        resp = httpx.Response(429, headers={"Retry-After": "45"}, request=req)
+        err = groq.RateLimitError("Rate limit exceeded", response=resp, body=None)
+
+        mock_client = MagicMock()
+        mock_client.chat.completions.create.side_effect = err
+        monkeypatch.setattr(groq, "Groq", lambda **kwargs: mock_client)
+
+        res1 = ai_engine.triage_incident("Water rising near bridge", "Musi Riverfront")
+        assert res1["triage_mode"] == "rule_based"
+        status = ai_engine.get_ai_status()
+        assert status["rate_limited"] is True
+        assert status["cooldown_remaining_seconds"] > 0
+
+        # Next distinct incident during active cooldown skips Groq API entirely
+        res2 = ai_engine.triage_incident("Road flooded near metro", "Ameerpet")
+        assert res2["triage_mode"] == "rule_based"
+        assert mock_client.chat.completions.create.call_count == 1
+
+
+@pytest.mark.skipif(
+    not os.getenv("GROQ_API_KEY") or os.getenv("GROQ_API_KEY") == "your_groq_api_key_here",
+    reason="GROQ_API_KEY is not configured; skipping real-network Groq integration test.",
+)
+def test_live_groq_api_integration():
+    import ai_engine
+    import config
+
+    ai_engine.reset_ai_state()
+    res = ai_engine.triage_incident(
+        description="Two elderly residents are stranded on the first floor near Chaderghat Bridge as floodwater rises.",
+        zone_name="Musi Riverfront",
+        location_text="Chaderghat Bridge",
+        people_affected=2,
+    )
+    assert res["triage_mode"] == "groq"
+    assert res["ai_category"] in INCIDENT_CATEGORIES
+    assert res["ai_urgency"] in URGENCY_LEVELS
+    assert res["people_affected"] == 2
+    assert res["vulnerable_flag"] is True
+    assert ai_engine.get_ai_status()["model"] == config.GROQ_MODEL

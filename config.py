@@ -20,9 +20,12 @@ load_dotenv()
 PROJECT_ROOT = Path(__file__).parent.resolve()
 
 # ---------------------------------------------------------------------------
-# API Keys
+# API Keys & Hosted LLM (Groq Only)
 # ---------------------------------------------------------------------------
-GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
+GROQ_API_KEY: str = os.getenv("GROQ_API_KEY", "")
+GROQ_MODEL: str = os.getenv("GROQ_MODEL", "openai/gpt-oss-20b")
+GROQ_COOLDOWN_SECONDS: int = int(os.getenv("GROQ_COOLDOWN_SECONDS", "60"))
+GROQ_MAX_RETRIES: int = int(os.getenv("GROQ_MAX_RETRIES", "2"))
 
 # ---------------------------------------------------------------------------
 # Database
@@ -99,6 +102,7 @@ INCIDENT_STATUSES: list[str] = [
     "Triaged",
     "In Review",
     "Team Assigned",
+    "Acknowledged",
     "In Progress",
     "Resolved",
 ]
@@ -108,7 +112,8 @@ STATUS_TRANSITIONS: dict[str, list[str]] = {
     "New":           ["Triaged"],
     "Triaged":       ["In Review"],
     "In Review":     ["Team Assigned", "Resolved"],
-    "Team Assigned": ["In Progress", "In Review"],
+    "Team Assigned": ["Acknowledged", "In Progress", "In Review"],
+    "Acknowledged":  ["In Progress", "In Review"],
     "In Progress":   ["Resolved", "In Review"],
     "Resolved":      [],
 }
@@ -123,11 +128,6 @@ VULNERABLE_GROUPS: list[str] = [
     "Pregnant women",
     "None reported",
 ]
-
-# ---------------------------------------------------------------------------
-# Gemini AI
-# ---------------------------------------------------------------------------
-GEMINI_MODEL: str = "gemini-2.0-flash"
 
 # ---------------------------------------------------------------------------
 # Seed Data Paths

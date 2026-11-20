@@ -1,0 +1,135 @@
+{
+  "created": "2026-03-28T18:14:08.920100+00:00",
+  "modified": "2026-03-28T18:14:09.142022+00:00",
+  "id": 19288171,
+  "conceptrecid": "19288170",
+  "doi": "10.5281/zenodo.19288171",
+  "conceptdoi": "10.5281/zenodo.19288170",
+  "doi_url": "https://doi.org/10.5281/zenodo.19288171",
+  "metadata": {
+    "title": "Global Flood Records",
+    "doi": "10.5281/zenodo.19288171",
+    "publication_date": "2026-03-28",
+    "description": "<p>A comprehensive global collection of large flood events from January 1985 to December 2023</p>",
+    "access_right": "open",
+    "creators": [
+      {
+        "name": "DFO - Flood Observatory (DFO)",
+        "affiliation": null
+      }
+    ],
+    "version": "0.9.0",
+    "resource_type": {
+      "title": "Dataset",
+      "type": "dataset"
+    },
+    "license": {
+      "id": "cc-by-4.0"
+    },
+    "relations": {
+      "version": [
+        {
+          "index": 0,
+          "is_last": true,
+          "parent": {
+            "pid_type": "recid",
+            "pid_value": "19288170"
+          }
+        }
+      ]
+    }
+  },
+  "title": "Global Flood Records",
+  "links": {
+    "self": "https://zenodo.org/api/records/19288171",
+    "self_html": "https://zenodo.org/records/19288171",
+    "preview_html": "https://zenodo.org/records/19288171?preview=1",
+    "doi": "https://doi.org/10.5281/zenodo.19288171",
+    "self_doi": "https://doi.org/10.5281/zenodo.19288171",
+    "self_doi_html": "https://zenodo.org/doi/10.5281/zenodo.19288171",
+    "reserve_doi": "https://zenodo.org/api/records/19288171/draft/pids/doi",
+    "parent": "https://zenodo.org/api/records/19288170",
+    "parent_html": "https://zenodo.org/records/19288170",
+    "parent_doi": "https://doi.org/10.5281/zenodo.19288170",
+    "parent_doi_html": "https://zenodo.org/doi/10.5281/zenodo.19288170",
+    "self_iiif_manifest": "https://zenodo.org/api/iiif/record:19288171/manifest",
+    "self_iiif_sequence": "https://zenodo.org/api/iiif/record:19288171/sequence/default",
+    "files": "https://zenodo.org/api/records/19288171/files",
+    "media_files": "https://zenodo.org/api/records/19288171/media-files",
+    "latest": "https://zenodo.org/api/records/19288171/versions/latest",
+    "latest_html": "https://zenodo.org/records/19288171/latest",
+    "versions": "https://zenodo.org/api/records/19288171/versions",
+    "draft": "https://zenodo.org/api/records/19288171/draft",
+    "access_links": "https://zenodo.org/api/records/19288171/access/links",
+    "access_grants": "https://zenodo.org/api/records/19288171/access/grants",
+    "access_users": "https://zenodo.org/api/records/19288171/access/users",
+    "access_request": "https://zenodo.org/api/records/19288171/access/request",
+    "access": "https://zenodo.org/api/records/19288171/access",
+    "communities": "https://zenodo.org/api/records/19288171/communities",
+    "communities-suggestions": "https://zenodo.org/api/records/19288171/communities-suggestions",
+    "request_deletion": "https://zenodo.org/api/records/19288171/request-deletion",
+    "file_modification": "https://zenodo.org/api/records/19288171/file-modification",
+    "quota_increase": "https://zenodo.org/api/records/19288171/quota-increase",
+    "requests": "https://zenodo.org/api/records/19288171/requests"
+  },
+  "updated": "2026-03-28T18:14:09.142022+00:00",
+  "recid": "19288171",
+  "revision": 4,
+  "files": [
+    {
+      "id": "f565021e-0c48-45f6-abc9-b4d3e8415509",
+      "key": "Global_Flood_Records.gpkg",
+      "size": 4489216,
+      "checksum": "md5:96d8ae15108b4314c8238954fd90f2cc",
+      "links": {
+        "self": "https://zenodo.org/api/records/19288171/files/Global_Flood_Records.gpkg/content"
+      }
+    },
+    {
+      "id": "5fca9616-c37b-4c8e-9da7-e607a8addb42",
+      "key": "CITATION.cff",
+      "size": 619,
+      "checksum": "md5:c5fe687bf3a41bf18e189678d7530f71",
+      "links": {
+        "self": "https://zenodo.org/api/records/19288171/files/CITATION.cff/content"
+      }
+    },
+    {
+      "id": "b973e17a-8ada-4f71-95bd-e6e08d3c004b",
+      "key": "LICENSE.txt",
+      "size": 7048,
+      "checksum": "md5:65d3616852dbf7b1a6d4b53b00626032",
+      "links": {
+        "self": "https://zenodo.org/api/records/19288171/files/LICENSE.txt/content"
+      }
+    },
+    {
+      "id": "25ec751f-9dd3-499b-9468-128e7933028c",
+      "key": "Global_Flood_Records.csv",
+      "size": 428865,
+      "checksum": "md5:8fe3cd72474abe8d4d83641e2d33266f",
+      "links": {
+        "self": "https://zenodo.org/api/records/19288171/files/Global_Flood_Records.csv/content"
+      }
+    }
+  ],
+  "swh": {},
+  "owners": [
+    {
+      "id": "7664"
+    }
+  ],
+  "status": "published",
+  "stats": {
+    "downloads": 3784,
+    "unique_downloads": 3090,
+    "views": 3038,
+    "unique_views": 2596,
+    "version_downloads": 3784,
+    "version_unique_downloads": 3090,
+    "version_unique_views": 2596,
+    "version_views": 3038
+  },
+  "state": "done",
+  "submitted": true
+}
