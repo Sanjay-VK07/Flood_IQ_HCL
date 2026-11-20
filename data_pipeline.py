@@ -54,6 +54,25 @@ DEFAULT_TIMEOUT = 25
 def _ensure_dirs() -> None:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    for sub in ("open_meteo", "zenodo", "srtm"):
+        (CACHE_DIR / sub).mkdir(parents=True, exist_ok=True)
+
+
+def _cache_file(subdir: str, filename: str) -> Path:
+    """
+    Return the organized cache path `CACHE_DIR/<subdir>/<filename>`.
+    Supports legacy flat cache files under `CACHE_DIR/<filename>` by migrating
+    them into the organized subdirectory if present.
+    """
+    _ensure_dirs()
+    target = CACHE_DIR / subdir / filename
+    legacy = CACHE_DIR / filename
+    if not target.exists() and legacy.exists() and legacy.is_file():
+        try:
+            legacy.replace(target)
+        except OSError:
+            return legacy
+    return target
 
 
 def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -102,10 +121,10 @@ def _request_with_retry(
 def fetch_zenodo_flood_records(force_refresh: bool = False) -> Dict[str, Any]:
     """Discover and download Global_Flood_Records.csv, .gpkg, and LICENSE.txt from Zenodo."""
     _ensure_dirs()
-    meta_cache = CACHE_DIR / f"zenodo_{ZENODO_RECORD_ID}_metadata.json"
-    csv_cache = CACHE_DIR / "Global_Flood_Records.csv"
-    gpkg_cache = CACHE_DIR / "Global_Flood_Records.gpkg"
-    lic_cache = CACHE_DIR / f"LICENSE_zenodo_{ZENODO_RECORD_ID}.txt"
+    meta_cache = _cache_file("zenodo", f"zenodo_{ZENODO_RECORD_ID}_metadata.json")
+    csv_cache = _cache_file("zenodo", "Global_Flood_Records.csv")
+    gpkg_cache = _cache_file("zenodo", "Global_Flood_Records.gpkg")
+    lic_cache = _cache_file("zenodo", f"LICENSE_zenodo_{ZENODO_RECORD_ID}.txt")
 
     record_meta: Optional[Dict[str, Any]] = None
     if not force_refresh and meta_cache.exists() and csv_cache.exists() and gpkg_cache.exists():
@@ -251,7 +270,7 @@ def fetch_srtm_elevations(
 ) -> Dict[str, Optional[float]]:
     """Fetch and cache SRTM 90m elevation (meters) for a list of (lat, lon) pairs."""
     _ensure_dirs()
-    cache_file = CACHE_DIR / "srtm_elevations.json"
+    cache_file = _cache_file("srtm", "srtm_elevations.json")
     elev_cache: Dict[str, Optional[float]] = {}
     if cache_file.exists():
         try:
@@ -302,7 +321,7 @@ def fetch_open_meteo_archive(
     """Fetch and cache hourly Open-Meteo Archive weather for a coordinate and date range."""
     _ensure_dirs()
     lat_r, lon_r = round(lat, 4), round(lon, 4)
-    cache_file = CACHE_DIR / f"open_meteo_{lat_r}_{lon_r}_{start_date}_{end_date}.json"
+    cache_file = _cache_file("open_meteo", f"open_meteo_{lat_r}_{lon_r}_{start_date}_{end_date}.json")
 
     raw_json: Optional[Dict[str, Any]] = None
     if not force_refresh and cache_file.exists():
