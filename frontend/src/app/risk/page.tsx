@@ -273,12 +273,16 @@ export default function FloodRiskPage() {
           <h2 className="text-[13px] font-bold text-[var(--text-primary)]">5-Zone Comparison Matrix</h2>
           <span className="text-[11px] text-[var(--text-muted)]">Sorted highest illustrative risk first</span>
         </div>
+        <p className="text-[11px] text-[var(--text-secondary)] mb-2">
+          The next 6-hour Open-Meteo precipitation outlook is shown separately; it does not change the illustrative heuristic risk score or represent a flood probability.
+        </p>
         <table className="w-full text-[12px]">
           <thead>
             <tr className="border-b border-[var(--border-hairline)] text-[10.5px] uppercase tracking-wider text-[var(--text-muted)] text-left">
               <th className="py-2 pr-3">Zone</th>
               <th className="py-2 pr-3">SRTM Elev.</th>
-              <th className="py-2 pr-3">Rainfall</th>
+              <th className="py-2 pr-3">Current Rain</th>
+              <th className="py-2 pr-3">Forecast Rain (6h)</th>
               <th className="py-2 pr-3">Drainage Vuln.</th>
               <th className="py-2 pr-3">Low-Lying</th>
               <th className="py-2 pr-3">Risk Score</th>
@@ -309,6 +313,20 @@ export default function FloodRiskPage() {
                   </td>
                   <td className="py-2 pr-3">
                     {z.rainfall_mm.toFixed(1)} mm <span className="text-[var(--text-muted)]">({z.rainfall_source})</span>
+                  </td>
+                  <td className="py-2 pr-3" title={z.forecast_source || "Forecast unavailable in simulation or fallback mode"}>
+                    {z.forecast_precipitation_6h_mm != null ? (
+                      <span>
+                        {z.forecast_precipitation_6h_mm.toFixed(1)} mm
+                        {z.forecast_window_start && z.forecast_window_end && (
+                          <span className="block text-[10px] text-[var(--text-muted)]">
+                            {z.forecast_window_start.slice(11, 16)}–{z.forecast_window_end.slice(11, 16)} IST
+                          </span>
+                        )}
+                      </span>
+                    ) : (
+                      <span className="text-[var(--text-muted)]">Unavailable</span>
+                    )}
                   </td>
                   <td className="py-2 pr-3">{z.drainage_score}/100</td>
                   <td className="py-2 pr-3">{z.low_lying_score}/100</td>

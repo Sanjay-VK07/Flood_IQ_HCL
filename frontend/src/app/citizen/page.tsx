@@ -277,12 +277,12 @@ export default function CitizenPortalPage() {
                 type="button"
                 onClick={async () => {
                   await logout();
-                  router.push("/login");
+                  router.replace("/login");
                 }}
                 className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-[6px] bg-[var(--bg-elevated)] hover:border-[var(--teal)] border border-[var(--border-hairline)] text-[11.5px] font-semibold text-[var(--text-primary)] cursor-pointer"
               >
                 <LogOut className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Sign Out</span>
+                <span className="hidden sm:inline">Sign Out / Switch Portal</span>
               </button>
             ) : (
               <Link
@@ -401,23 +401,25 @@ export default function CitizenPortalPage() {
                 <span className="text-[11px] font-bold uppercase tracking-[0.06em] text-[var(--text-muted)]">
                   Rapid Emergency Desks
                 </span>
-                <span className="text-[11px] font-semibold text-[var(--teal)]">Toll-free 24/7</span>
+                <span className="text-[11px] font-semibold text-[var(--teal)]">Telangana emergency numbers · Tap to call</span>
               </div>
               <div className="grid grid-cols-3 gap-2.5">
                 {[
-                  { num: "112", label: "Flood Rescue" },
-                  { num: "108", label: "Medical Desk" },
-                  { num: "1800-FL", label: "Civic Control" },
+                  { num: "108", label: "Ambulance" },
+                  { num: "101", label: "Fire & Rescue" },
+                  { num: "100", label: "Police" },
                 ].map((d) => (
-                  <div
+                  <a
                     key={d.num}
+                    href={`tel:${d.num}`}
+                    aria-label={`Call ${d.label} at ${d.num}`}
                     style={{ boxShadow: "var(--card-shadow)" }}
-                    className="p-3 rounded-[10px] bg-[var(--bg-panel)] border border-[var(--border-hairline)] text-center space-y-1"
+                    className="block p-3 rounded-[10px] bg-[var(--bg-panel)] border border-[var(--border-hairline)] text-center space-y-1 hover:border-[var(--teal)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--teal)]"
                   >
                     <Phone className="w-4 h-4 mx-auto text-[var(--teal)]" />
                     <div className="text-[15px] font-bold text-[var(--text-primary)]">{d.num}</div>
                     <div className="text-[11px] text-[var(--text-muted)]">{d.label}</div>
-                  </div>
+                  </a>
                 ))}
               </div>
             </div>
@@ -509,7 +511,7 @@ export default function CitizenPortalPage() {
               <div className="p-4 rounded-[10px] bg-[#ECFDF5] dark:bg-[#37C98A]/10 border border-[#6EE7B7] dark:border-[#37C98A]/40 space-y-2.5">
                 <div className="flex items-center gap-2 text-[#065F46] dark:text-[#37C98A] font-bold text-[14px]">
                   <CheckCircle2 className="w-4 h-4" />
-                  <span>Incident Submitted &amp; Triaged</span>
+                  <span>Report Received &amp; Sent to Municipality</span>
                 </div>
                 <div className="grid grid-cols-2 gap-2.5 text-[12px]">
                   <div className="p-2.5 rounded-[8px] bg-[var(--bg-panel)] border border-[var(--border-hairline)]">
@@ -530,7 +532,7 @@ export default function CitizenPortalPage() {
                   </div>
                 </div>
                 <p className="text-[12px] text-[var(--text-secondary)]">
-                  AI-assisted triage has been performed automatically after submission (
+                  Your report is saved and appears in the Municipal Authority review queue. AI-assisted triage ran after submission (
                   <strong>{submittedReceipt.incident.ai_category}</strong>,{" "}
                   <strong>{submittedReceipt.incident.ai_urgency}</strong> urgency) to help municipal
                   authorities prioritize review. Save your Incident ID and Tracking Code above to

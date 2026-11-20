@@ -36,6 +36,10 @@ export interface EvaluatedZone {
   low_lying_score: number;
   rainfall_mm: number;
   rainfall_source: string;
+  forecast_precipitation_6h_mm?: number | null;
+  forecast_window_start?: string | null;
+  forecast_window_end?: string | null;
+  forecast_source?: string | null;
   elevation_m?: number | null;
   risk_score: number;
   risk_level: RiskBand;

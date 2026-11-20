@@ -58,18 +58,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setStoredToken(null);
     setUser(null);
     if (!token) return;
-    try {
-      await fetch(`${API_BASE}/api/auth/logout`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        cache: "no-store",
-      });
-    } catch {
-      // ignore network error on logout
-    }
+    // Clear the browser session immediately. A slow or unreachable API must not
+    // trap the user on a protected portal instead of returning to role selection.
+    void fetch(`${API_BASE}/api/auth/logout`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      cache: "no-store",
+    }).catch(() => {
+      // Local sign-out still succeeds when the API cannot be reached.
+    });
   }, []);
 
   return (

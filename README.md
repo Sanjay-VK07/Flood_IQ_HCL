@@ -2,67 +2,141 @@
 
 **AI-Assisted Urban Flood Intelligence & Emergency Response Coordination**
 
-> **Prototype Disclaimer**: This is a hackathon prototype. Zone risk scores use an
-> explainable heuristic, not a validated hydrological model. Response teams and their
-> locations are illustrative demonstration data. Groq AI assists with incident interpretation,
-> but human operators control all assignments.
+> **Prototype Disclaimer**: This is a hackathon prototype for disaster response coordination. Zone risk scores use an explainable heuristic, not a validated hydrological model. Response teams, bases, and locations are illustrative demonstration data. Groq AI or rule-based fallback assists with incident interpretation, while human operators retain sole dispatch authority. The app does not predict floods or dispatch real-world responders.
+
+---
+
+## Architecture & Portals
+
+FloodIQ links three distinct roles through a unified FastAPI backend and SQLite persistence layer:
+
+1. **Citizen Portal (`/citizen`)**: Neighborhood flood intelligence, quick emergency reporting with location, description, affected persons, and guest tracking (`TRK-...`).
+2. **Municipal Authority Portal (`/`, `/control-room`, `/history`, `/risk`)**: Citywide command center, zone telemetry, AI/rule-based triage review, and human-approved team dispatch.
+3. **Emergency Response Team Portal (`/team`)**: Tactical queue for assigned field units, order acknowledgement, field note submission, and on-scene resolution.
+
+---
 
 ## Quick Start
 
+### 1. Prerequisites
+- Python 3.9+ (with venv)
+- Node.js 18+ (with npm)
+
+### 2. Backend Setup
+
 ```bash
-# 1. Clone and enter the project
 cd FloodIQ
 
-# 2. Create virtual environment
-python -m venv .venv
-# macOS / Linux: source .venv/bin/activate
-# Windows PowerShell: .venv\Scripts\Activate.ps1
+# Create & activate virtual environment
+python3 -m venv venv
+source venv/bin/activate    # On Windows: venv\Scripts\activate
 
-# 3. Install dependencies
+# Install Python dependencies
 pip install -r requirements.txt
 
-# 4. Configure environment
+# Configure environment
 cp .env.example .env
-# Edit .env and add your GROQ_API_KEY and GROQ_MODEL (optional — deterministic fallback works without it)
-# Optional: set CORS_ORIGINS=http://localhost:3000 for custom frontend origins
-# Frontend: copy frontend/.env.example to frontend/.env.local if API is not on localhost:8000
+# GROQ_API_KEY can remain blank — app uses deterministic rule-based triage fallback
 
-# 5. Run the FastAPI backend (http://localhost:8000, docs at /docs, health at /health)
+# Start FastAPI backend (port 8000)
 uvicorn api:app --host 0.0.0.0 --port 8000
+```
+Backend health check: `http://localhost:8000/health`  
+Interactive OpenAPI documentation: `http://localhost:8000/docs`
 
-# 6. Run the Next.js frontend (in a second terminal, http://localhost:3000)
-cd frontend
+### 3. Frontend Setup (in a separate terminal)
+
+```bash
+cd FloodIQ/frontend
+
+# Install dependencies
 npm install
-npm run dev
 
-# 7. Run backend tests
+# Build & run production server (port 3000)
+npm run build
+npm run start -- -p 3000
+```
+Open `http://localhost:3000` in your browser.
+
+> **Note for Judges**: Use the production workflow (`npm run build && npm run start -- -p 3000`) for evaluation. Running in production mode provides maximum responsiveness and ensures Next.js development diagnostic overlays (such as the route-info indicator) are disabled.
+
+---
+
+## Entry Flow & Authentication
+
+On first visit or after sign-out, the app presents the **Sign-In / Portal Selection** screen (`/login`).
+
+Users can choose their operational role using the one-tap **Demo Profile Switcher**:
+
+| Role | Demo Identity | Credentials | Landing Destination |
+|---|---|---|---|
+| **Citizen** | Asha Reddy | `citizen@floodiq.demo` / `Citizen@123` | `/citizen` (Overview tab) |
+| **Municipal Authority** | Duty Officer Verma | `authority@floodiq.demo` / `Authority@123` | `/` (Command Center) |
+| **Field Response Unit** | Commander Vikram Singh (Bravo) | `bravo@floodiq.demo` / `Team@123` | `/team` (Tactical Queue) |
+| **Public Guest** | Unauthenticated Citizen | *None required* | `/citizen` (Guest Mode) |
+
+Signing out from any portal returns the user to the portal selection screen.
+
+---
+
+## 2–3 Minute Judge Demo Script
+
+### Step 1: Citizen Emergency Submission (45s)
+1. Open `http://localhost:3000/login` and click **Load Citizen Demo (Asha Reddy)**.
+2. The Citizen Portal opens on the **Dashboard** overview. Click **Report** tab (or **Submit Emergency Report**).
+3. Select zone **Musi Riverfront**, emergency type **Water Rescue / Stranded**, and landmark `Chaderghat Low Bridge Lane 4`.
+4. Enter affected people: `3` and description: *"Ground floor flooded, elderly residents trapped."*
+5. Click **Submit Report**.
+6. View the confirmation receipt showing **Incident ID** (`FIQ-...`), **Tracking Code** (`TRK-...`), and initial AI triage status.
+
+### Step 2: Municipal Authority Review & Dispatch Approval (60s)
+1. In a second browser tab (or sign out and switch), sign in as **Load Authority Demo (Officer Verma)**.
+2. On the **Command Center** (`/`), the newly reported incident appears in the queue.
+3. Click **Review & Dispatch** or navigate to **Response Control Room** (`/control-room`).
+4. Select the incident to review:
+   - Priority score and vulnerability breakdown.
+   - AI triage rationale (or deterministic fallback reasoning).
+   - Recommended response unit: **Water Rescue Bravo** (with score and availability).
+5. Enter an operator dispatch note (e.g., *"Deploy rubber dinghy with life jackets"*) and click **Authorize & Dispatch Team**.
+6. Status advances to **Team Assigned**.
+
+### Step 3: Response Team Tactical Execution & Resolution (45s)
+1. Switch to a third tab (or sign out and switch) and sign in as **Load Field Unit Demo (Bravo wrt_02)**.
+2. The tactical queue displays the assigned incident.
+3. Click **Acknowledge Assignment** → status advances to **Acknowledged**.
+4. Enter an en-route/arrival note and click **Mark In Progress** → status advances to **In Progress**.
+5. Enter field resolution notes (e.g., *"All 3 residents safely evacuated to dry shelter"*) and click **Submit Resolution** → status advances to **Resolved**.
+
+### Step 4: Cross-Portal Synchronization & Verification (15s)
+1. Check the Citizen Portal (**My Reports** or **Tracking** with tracking code) → incident shows **Resolved** with complete timeline.
+2. Check Authority Portal (**Incident History** or **Control Room**) → incident reflects **Resolved** with complete audit history.
+
+---
+
+## Weather Integration & Rainfall Forecast
+
+- **Live Weather Mode**: FloodIQ connects to the Open-Meteo API for real-time precipitation and a **6-hour hourly rainfall outlook** across Hyderabad's pilot zones.
+- **Transparency & Separation**: The 6-hour forecast (source: Open-Meteo, with explicit IST time window) is displayed in **Flood Risk Intelligence** (`/risk`) as an informational input. It is strictly kept separate from the heuristic risk score and is never represented as a flood probability.
+- **Scenario Simulation**: Operators can toggle the simulation slider (`20 mm`, `50 mm`, `100 mm`) to test system preparedness and team capacity under varying conditions.
+- **Graceful Fallback**: If Open-Meteo is unreachable, the system automatically switches to cached values or offline baseline telemetry without crashing.
+
+---
+
+## Automated Verification
+
+```bash
+# Run backend pytest suite (116 tests)
 pytest tests/ -v
+
+# Run 3-portal end-to-end integration test
+python3 scripts/verify_three_sessions.py
+
+# Run frontend build check
+cd frontend && npm run build
 ```
 
-## Three-Minute Demo Flow
-
-1. **Command Center (`1. Command Center`)**: Start at the `20 mm` baseline simulation. Point out the 5 Hyderabad pilot zones, KPIs, and vulnerability-first incident queue.
-2. **Cloudburst Simulation (`100 mm`)**: Click `100 mm` in the sidebar and open `2. Predict — Flood Risk` to show zone scores, risk bands, the `R = 0.40P + 0.30D + 0.30L` breakdown chart, and dynamic checklists in `3. Prepare — Readiness`.
-3. **Citizen Intake & AI Triage (`4. Citizen Reporting`)**: Load Incident A (stranded elderly near Musi Riverfront) and submit to see the extracted vulnerability/hazard flags, triage mode, and priority score (~92/100).
-4. **Human-in-the-Loop Dispatch (`5. Respond — Control Room`)**: Click **Proceed to Control Room Response Dispatch**, inspect the priority breakdown and recommended team (`Water Rescue Bravo`), approve dispatch with an operator note, and advance status to `In Progress` / `Resolved`.
-5. **Audit Trail & Reset (`6. Incident History` & `7. System Information`)**: Review the chronological timeline, explain fallback resilience and prototype limitations, then click **Reset Demo Data** in the sidebar.
-
-## Architecture
-
-| Module | Responsibility |
-|---|---|
-| `config.py` | Configuration, constants, environment variables |
-| `database.py` | SQLite schema, CRUD, workflow transitions |
-| `weather.py` | Open-Meteo integration with offline fallback |
-| `risk_engine.py` | Explainable flood risk scoring |
-| `ai_engine.py` | Gemini AI triage with deterministic fallback |
-| `response_engine.py` | Priority scoring and team recommendation |
-| `app.py` | Streamlit UI — navigation, rendering, forms |
-
-## Team
-
-Built for a 24-hour hackathon by a team of three.
+---
 
 ## License
 
-MIT
+MIT License. Designed and built for the AI Disaster Response Hackathon.

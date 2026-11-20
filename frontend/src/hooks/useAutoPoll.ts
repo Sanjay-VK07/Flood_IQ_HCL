@@ -14,21 +14,31 @@ export function useAutoPoll(
 ): void {
   const savedCallback = useRef(callback);
   savedCallback.current = callback;
+  const inFlightRef = useRef(false);
 
   useEffect(() => {
     if (!enabled) return;
 
-    const runIfVisible = () => {
+    const runIfVisible = async () => {
       if (typeof document !== "undefined" && document.visibilityState !== "visible") {
         return;
       }
-      void savedCallback.current();
+      if (inFlightRef.current) return;
+      inFlightRef.current = true;
+      try {
+        await savedCallback.current();
+      } finally {
+        inFlightRef.current = false;
+      }
     };
 
-    const timer = window.setInterval(runIfVisible, intervalMs);
+    const timer = window.setInterval(() => {
+      void runIfVisible();
+    }, intervalMs);
+
     const onVisibilityChange = () => {
       if (document.visibilityState === "visible") {
-        void savedCallback.current();
+        void runIfVisible();
       }
     };
     document.addEventListener("visibilitychange", onVisibilityChange);

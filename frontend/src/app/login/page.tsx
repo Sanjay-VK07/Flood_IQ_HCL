@@ -34,7 +34,7 @@ const ROLE_CARDS = [
     key: "authority",
     label: "Municipal Authority",
     badge: "OPERATIONS CENTER",
-    desc: "Command center oversight, Groq AI triage review, and human-approved dispatch.",
+    desc: "Command center oversight, AI-assisted triage review, and human-approved dispatch.",
     meta: "Hyderabad Pilot · Dispatch Gate",
     email: "authority@floodiq.demo",
     password: "Authority@123",
