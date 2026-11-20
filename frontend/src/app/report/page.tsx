@@ -112,7 +112,7 @@ export default function CitizenReportingPage() {
         <div className="lg:col-span-7 p-4 rounded-[4px] bg-[var(--bg-panel)] border border-[var(--border-hairline)] space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--border-hairline)] pb-2">
             <h2 className="text-[14px] font-bold text-[var(--text-primary)]">Submit Emergency Report</h2>
-            <span className="text-[11px] text-[var(--text-muted)]">Demo Presets</span>
+            <span className="text-[11px] text-[var(--text-muted)]">Quick Templates</span>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -121,14 +121,14 @@ export default function CitizenReportingPage() {
               onClick={loadPresetA}
               className="px-3 py-1.5 rounded-[4px] bg-[#FF5364]/15 border border-[#FF5364]/40 text-[#FF8E99] hover:bg-[#FF5364]/25 text-[11.5px] font-semibold text-left transition-colors"
             >
-              Preset A: Stranded Elderly (Critical)
+              Template A: Stranded Elderly (Critical)
             </button>
             <button
               type="button"
               onClick={loadPresetB}
               className="px-3 py-1.5 rounded-[4px] bg-[var(--bg-elevated)] border border-[var(--border-active)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] text-[11.5px] font-semibold text-left transition-colors"
             >
-              Preset B: Waterlogged Road (Moderate)
+              Template B: Waterlogged Road (Moderate)
             </button>
           </div>
 
@@ -160,7 +160,7 @@ export default function CitizenReportingPage() {
 
               <div>
                 <label className="block text-[11px] font-semibold text-[var(--text-secondary)] mb-1">
-                  Hyderabad Pilot Zone *
+                  Assessment Zone *
                 </label>
                 <select
                   value={zoneId}

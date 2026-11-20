@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
@@ -17,6 +17,7 @@ import {
   CloudRain,
   LogOut,
   UserCheck,
+  SlidersHorizontal,
 } from "lucide-react";
 import { useAuth, roleHomePath } from "@/context/AuthContext";
 import { useSimulation } from "@/context/SimulationContext";
@@ -39,6 +40,24 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const { rainfallMm, useSimulation: isSim, setRainfallMm, setUseSimulation, resetDemo, resetting } =
     useSimulation();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [customOpen, setCustomOpen] = useState(false);
+  const [draftMm, setDraftMm] = useState<number>(rainfallMm);
+  const popoverRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    setDraftMm(rainfallMm);
+  }, [rainfallMm]);
+
+  useEffect(() => {
+    if (!customOpen) return;
+    const onPointerDown = (e: MouseEvent) => {
+      if (popoverRef.current && !popoverRef.current.contains(e.target as Node)) {
+        setCustomOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", onPointerDown);
+    return () => document.removeEventListener("mousedown", onPointerDown);
+  }, [customOpen]);
 
   const isStandalonePortal =
     pathname === "/login" || pathname.startsWith("/citizen") || pathname.startsWith("/team");
@@ -101,7 +120,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               </div>
             </div>
           </div>
-          <span className="px-1.5 py-0.5 text-[9px] font-bold tracking-wider bg-[var(--bg-elevated)] border border-[var(--border-hairline)] text-[var(--teal)] rounded-[3px] shrink-0">
+          <span className="px-1.5 py-0.5 text-[9px] font-bold tracking-wider bg-[var(--bg-elevated)] border border-[var(--border-hairline)] text-[var(--teal)] rounded-[3px] shrink-0 mr-7 lg:mr-0">
             OPS
           </span>
         </div>
@@ -119,11 +138,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 key={item.href}
                 href={item.href}
                 onClick={() => setMobileOpen(false)}
-                className={`flex items-center gap-2.5 px-2.5 py-2 rounded-[6px] text-[12.5px] transition-colors ${
-                  active
-                    ? "bg-[var(--teal)] text-[var(--teal-fg)] font-bold"
-                    : "text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)] hover:text-[var(--text-primary)] font-medium"
-                }`}
+                className={`flex items-center gap-2.5 px-2.5 py-2 rounded-[6px] text-[12.5px] transition-colors ${active
+                  ? "bg-[var(--teal)] text-[var(--teal-fg)] font-bold"
+                  : "text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)] hover:text-[var(--text-primary)] font-medium"
+                  }`}
               >
                 <Icon className="w-4 h-4 shrink-0" />
                 <span className="truncate">{item.label}</span>
@@ -131,48 +149,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             );
           })}
         </nav>
-
-        {/* Sidebar Rainfall Control */}
-        <div className="mt-4 pt-3 border-t border-[var(--border-hairline)]">
-          <div className="flex items-center justify-between mb-2 px-1">
-            <span className="text-[10px] font-bold uppercase tracking-[0.08em] text-[var(--text-muted)]">
-              Rainfall Control
-            </span>
-            <button
-              type="button"
-              onClick={() => setUseSimulation(!isSim)}
-              className={`px-1.5 py-0.5 rounded-[3px] text-[10px] font-bold uppercase border transition-colors ${
-                isSim
-                  ? "bg-[var(--teal)]/15 text-[var(--teal)] border-[var(--teal)]/40"
-                  : "bg-[#ECFDF5] dark:bg-[#37C98A]/15 text-[#065F46] dark:text-[#37C98A] border-[#6EE7B7] dark:border-[#37C98A]/40"
-              }`}
-            >
-              {isSim ? "Sim" : "Live"}
-            </button>
-          </div>
-          {isSim ? (
-            <div className="space-y-2 px-1">
-              <div className="flex items-center justify-between text-[11px] text-[var(--text-secondary)]">
-                <span>Scenario Input</span>
-                <span className="font-bold text-[var(--teal)]">{rainfallMm} mm</span>
-              </div>
-              <input
-                type="range"
-                min={0}
-                max={150}
-                step={5}
-                value={rainfallMm}
-                onChange={(e) => setRainfallMm(Number(e.target.value))}
-                className="w-full accent-[var(--teal)] cursor-pointer"
-                aria-label="Scenario Rainfall (mm)"
-              />
-            </div>
-          ) : (
-            <p className="text-[11px] text-[var(--text-secondary)] px-1">
-              Using Open-Meteo API with automatic offline fallback.
-            </p>
-          )}
-        </div>
       </div>
 
       {/* Footer / User & Demo Reset */}
@@ -209,12 +185,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           className="w-full flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-[6px] bg-[var(--bg-elevated)] hover:border-[var(--teal)] border border-[var(--border-hairline)] text-[11.5px] font-semibold text-[var(--text-primary)] transition-colors disabled:opacity-50 cursor-pointer"
         >
           <RotateCcw className={`w-3.5 h-3.5 ${resetting ? "animate-spin" : ""}`} />
-          <span>{resetting ? "Resetting..." : "Reset Demo Data"}</span>
+          <span>{resetting ? "Resetting..." : "Reset Scenario Data"}</span>
         </button>
 
         <div className="p-2 rounded-[6px] bg-[var(--bg-elevated)] border border-[var(--border-hairline)] text-[11px] space-y-1">
           <div className="flex justify-between">
-            <span className="font-semibold text-[var(--text-primary)]">Hyderabad Pilot</span>
+            <span className="font-semibold text-[var(--text-primary)]">Hyderabad Coverage</span>
             <span className="text-[var(--teal)] font-semibold">5 Zones</span>
           </div>
           <div className="flex justify-between text-[var(--text-secondary)]">
@@ -235,7 +211,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       {/* Mobile Drawer */}
       {mobileOpen && (
-        <div className="fixed inset-0 z-50 lg:hidden flex">
+        <div className="fixed inset-0 z-[1100] lg:hidden flex">
           <div className="w-[240px] bg-[var(--bg-rail)] border-r border-[var(--border-hairline)] h-full relative">
             <button
               type="button"
@@ -269,26 +245,24 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 FloodIQ Disaster Management Platform
               </span>
               <span
-                className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-[4px] text-[10px] font-bold uppercase tracking-[0.06em] border ${
-                  isSim
-                    ? "bg-[#FEF2F2] text-[#991B1B] border-[#FCA5A5] dark:bg-[#FF5364]/15 dark:text-[#FF8E99] dark:border-[#FF5364]/45"
-                    : "bg-[#ECFDF5] text-[#065F46] border-[#6EE7B7] dark:bg-[#37C98A]/15 dark:text-[#37C98A] dark:border-[#37C98A]/45"
-                }`}
+                className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-[4px] text-[10px] font-bold uppercase tracking-[0.06em] border ${isSim
+                  ? "bg-[#FEF2F2] text-[#991B1B] border-[#FCA5A5] dark:bg-[#FF5364]/15 dark:text-[#FF8E99] dark:border-[#FF5364]/45"
+                  : "bg-[#ECFDF5] text-[#065F46] border-[#6EE7B7] dark:bg-[#37C98A]/15 dark:text-[#37C98A] dark:border-[#37C98A]/45"
+                  }`}
               >
                 <span
-                  className={`w-1.5 h-1.5 rounded-full ${
-                    isSim ? "bg-[var(--critical)]" : "bg-[var(--low)]"
-                  }`}
+                  className={`w-1.5 h-1.5 rounded-full ${isSim ? "bg-[var(--critical)]" : "bg-[var(--low)]"
+                    }`}
                 />
-                {isSim ? "Simulation Active" : "Live Weather Feed"}
+                {isSim ? "Scenario Mode" : "Weather Data"}
               </span>
               <span className="hidden sm:inline-flex items-center gap-1.5 px-2 py-0.5 rounded-[4px] bg-[var(--bg-elevated)] border border-[var(--border-hairline)] text-[11px] text-[var(--text-secondary)]">
                 <CloudRain className="w-3.5 h-3.5 text-[var(--teal)]" />
-                {isSim ? `Scenario: ${rainfallMm} mm` : "Open-Meteo (Auto-Fallback)"}
+                {isSim ? `Scenario: ${rainfallMm} mm` : "Open-Meteo Weather Data"}
               </span>
             </div>
 
-            {/* Scenario Presets + Theme Toggle */}
+            {/* Unified Rainfall Scenario Controls + Theme Toggle */}
             <div className="flex items-center gap-1.5 flex-wrap">
               {presets.map((p) => {
                 const active = isSim && rainfallMm === p.mm;
@@ -299,17 +273,110 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                     onClick={() => {
                       setUseSimulation(true);
                       setRainfallMm(p.mm);
+                      setCustomOpen(false);
                     }}
-                    className={`px-2 py-1 rounded-[5px] text-[11px] font-semibold border transition-colors cursor-pointer ${
-                      active
-                        ? "bg-[var(--teal)] text-[var(--teal-fg)] border-[var(--teal)] font-bold"
-                        : "bg-[var(--bg-elevated)] text-[var(--text-secondary)] border-[var(--border-hairline)] hover:border-[var(--teal)] hover:text-[var(--text-primary)]"
-                    }`}
+                    className={`h-7 px-2 rounded-[5px] text-[11px] font-semibold border transition-colors cursor-pointer ${active
+                      ? "bg-[var(--teal)] text-[var(--teal-fg)] border-[var(--teal)] font-bold"
+                      : "bg-[var(--bg-elevated)] text-[var(--text-secondary)] border-[var(--border-hairline)] hover:border-[var(--teal)] hover:text-[var(--text-primary)]"
+                      }`}
                   >
                     {p.label}
                   </button>
                 );
               })}
+
+              {/* Custom Scenario Popover */}
+              <div className="relative" ref={popoverRef}>
+                <button
+                  type="button"
+                  aria-expanded={customOpen}
+                  aria-label="Custom Rainfall Scenario"
+                  onClick={() => {
+                    setDraftMm(rainfallMm);
+                    setCustomOpen((prev) => !prev);
+                  }}
+                  className={`h-7 px-2 rounded-[5px] text-[11px] font-semibold border transition-colors inline-flex items-center gap-1 cursor-pointer ${!isSim || ![20, 50, 100].includes(rainfallMm)
+                    ? "bg-[var(--teal)] text-[var(--teal-fg)] border-[var(--teal)] font-bold"
+                    : "bg-[var(--bg-elevated)] text-[var(--text-secondary)] border-[var(--border-hairline)] hover:border-[var(--teal)] hover:text-[var(--text-primary)]"
+                    }`}
+                >
+                  <SlidersHorizontal className="w-3 h-3" />
+                  <span>
+                    {!isSim
+                      ? "Weather Data"
+                      : ![20, 50, 100].includes(rainfallMm)
+                        ? `Custom (${rainfallMm}mm)`
+                        : "Custom"}
+                  </span>
+                </button>
+
+                {customOpen && (
+                  <div className="absolute left-0 sm:left-auto sm:right-0 mt-1.5 w-64 p-3 rounded-[8px] bg-[var(--bg-panel)] border border-[var(--border-hairline)] shadow-lg z-50 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-bold uppercase tracking-[0.06em] text-[var(--text-muted)]">
+                        Rainfall Scenario Input
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setUseSimulation(!isSim)}
+                        className={`px-2 py-0.5 rounded-[4px] text-[10px] font-bold uppercase border cursor-pointer ${isSim
+                          ? "bg-[var(--teal)]/15 text-[var(--teal)] border-[var(--teal)]/40"
+                          : "bg-[#ECFDF5] dark:bg-[#37C98A]/15 text-[#065F46] dark:text-[#37C98A] border-[#6EE7B7] dark:border-[#37C98A]/40"
+                          }`}
+                      >
+                        {isSim ? "Scenario" : "Weather"}
+                      </button>
+                    </div>
+
+                    {isSim ? (
+                      <>
+                        <div className="space-y-1.5">
+                          <div className="flex items-center justify-between text-[12px]">
+                            <span className="text-[var(--text-secondary)]">Scenario Rainfall</span>
+                            <span className="font-bold text-[var(--teal)]">{draftMm} mm</span>
+                          </div>
+                          <input
+                            type="range"
+                            min={0}
+                            max={150}
+                            step={5}
+                            value={draftMm}
+                            onChange={(e) => setDraftMm(Number(e.target.value))}
+                            className="w-full accent-[var(--teal)] cursor-pointer"
+                            aria-label="Custom Scenario Rainfall (mm)"
+                          />
+                        </div>
+                        <div className="flex items-center justify-end gap-1.5 pt-1">
+                          <button
+                            type="button"
+                            onClick={() => setCustomOpen(false)}
+                            className="px-2.5 py-1 rounded-[5px] bg-[var(--bg-elevated)] border border-[var(--border-hairline)] text-[11px] font-semibold text-[var(--text-secondary)] cursor-pointer"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setUseSimulation(true);
+                              setRainfallMm(draftMm);
+                              setCustomOpen(false);
+                            }}
+                            className="px-3 py-1 rounded-[5px] bg-[var(--teal)] hover:bg-[var(--teal-hover)] text-[var(--teal-fg)] text-[11px] font-bold cursor-pointer"
+                          >
+                            Apply
+                          </button>
+                        </div>
+                      </>
+                    ) : (
+                      <p className="text-[11.5px] text-[var(--text-secondary)]">
+                        Weather Data mode retrieves Open-Meteo rainfall with automatic offline fallback. Switch to{" "}
+                        <strong>Scenario</strong> to test custom rainfall inputs.
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+
               <ThemeToggle />
             </div>
           </div>

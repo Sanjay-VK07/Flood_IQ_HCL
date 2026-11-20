@@ -192,7 +192,7 @@ def get_ai_status() -> Dict[str, Any]:
     elif cooldown_remaining > 0:
         status_label = _LATEST_PROVIDER_STATUS if _LATEST_PROVIDER_STATUS in ("rate_limited", "quota_exhausted") else "rate_limited"
         active_mode = "rule_based"
-    elif _LATEST_PROVIDER_STATUS in ("provider_error", "validation_error"):
+    elif _LATEST_PROVIDER_STATUS in ("provider_error", "validation_error", "invalid_api_key"):
         status_label = _LATEST_PROVIDER_STATUS
         active_mode = "rule_based"
     elif _LATEST_PROVIDER_STATUS == "ok":
@@ -460,7 +460,7 @@ def _groq_triage(
             if status_code >= 500 and attempt < max_attempts - 1:
                 time.sleep(min(2 ** attempt, 2.0))
                 continue
-            _LATEST_PROVIDER_STATUS = "provider_error"
+            _LATEST_PROVIDER_STATUS = "invalid_api_key" if status_code == 401 else "provider_error"
             _LAST_ERROR_SUMMARY = f"Groq API returned HTTP {status_code}."
             logger.warning("Groq APIStatusError %s: %s", status_code, exc)
             return None

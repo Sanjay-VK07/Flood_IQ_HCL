@@ -376,8 +376,19 @@ def api_create_incident(
     if not payload.description.strip():
         raise HTTPException(status_code=400, detail="Incident description cannot be empty")
 
-    if payload.photo_data_url is not None and not payload.photo_data_url.startswith("data:image/"):
-        raise HTTPException(status_code=400, detail="Uploaded photo must be a valid image data URL")
+    if payload.photo_data_url is not None:
+        allowed_prefixes = (
+            "data:image/png;base64,",
+            "data:image/jpeg;base64,",
+            "data:image/jpg;base64,",
+            "data:image/webp;base64,",
+            "data:image/gif;base64,",
+        )
+        if not payload.photo_data_url.startswith(allowed_prefixes):
+            raise HTTPException(
+                status_code=400,
+                detail="Uploaded photo must be a base64 PNG, JPEG, WEBP, or GIF image data URL.",
+            )
 
     zone_name = zone_map[payload.zone_id]["zone_name"]
     triage_res = triage_incident(

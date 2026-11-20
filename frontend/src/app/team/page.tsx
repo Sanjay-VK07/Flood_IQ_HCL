@@ -207,13 +207,13 @@ export default function TeamPortalPage() {
                 {team?.team_name || user.full_name} · {team?.team_id || user.team_id}
               </div>
               <div className="text-[11px] text-white/80">
-                Base Zone: {team?.base_zone || "Assigned Sector"} · Auto-Sync Active (4s)
+                Base Zone: {team?.base_zone || "Assigned Sector"} · Auto-Refresh (4s)
               </div>
             </div>
           </div>
           <span className="px-2.5 py-1 rounded-[6px] bg-white/10 border border-white/15 text-[11px] font-bold text-[#21C7B7]">
             <Radio className="w-3.5 h-3.5 inline mr-1" />
-            DISPATCH LINKED
+            ASSIGNED QUEUE
           </span>
         </div>
 
@@ -370,6 +370,7 @@ export default function TeamPortalPage() {
                   )}
 
                   {inc.photo_data_url && (
+                    /* eslint-disable-next-line @next/next/no-img-element */
                     <img
                       src={inc.photo_data_url}
                       alt="Citizen uploaded incident evidence"

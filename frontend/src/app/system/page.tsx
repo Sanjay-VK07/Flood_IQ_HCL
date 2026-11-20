@@ -39,10 +39,10 @@ export default function SystemInfoPage() {
             System Information & Diagnostics
           </h1>
           <p className="text-[12px] text-[var(--text-secondary)]">
-            Live weather/AI service modes, explainable scoring formulas, and hackathon prototype disclosures.
+            Weather data integration, AI triage diagnostics, scoring formulas, and data source disclosures.
           </p>
         </div>
-        <Badge tone="teal">Prototype Environment</Badge>
+        <Badge tone="teal">System Diagnostics</Badge>
       </div>
 
       {/* 3 Diagnostics Cards */}
@@ -129,12 +129,25 @@ export default function SystemInfoPage() {
 
         <div className="p-4 rounded-[4px] bg-[var(--bg-panel)] border border-[var(--border-hairline)] space-y-3">
           <h2 className="text-[14px] font-bold text-[var(--text-primary)] border-b border-[var(--border-hairline)] pb-1.5">
-            Prototype Scope & Limitations
+            Data Sources &amp; Methodology Disclosures
           </h2>
           <ul className="space-y-2 text-[12px] text-[var(--text-secondary)] list-disc pl-4">
-            {status.limitations.map((lim, idx) => (
-              <li key={idx}>{lim}</li>
-            ))}
+            <li>
+              <b className="text-[var(--text-primary)]">Rainfall Scenarios:</b> Presets (20, 50, 100 mm) and custom slider values are user-configured scenario inputs, not local rain-gauge measurements.
+            </li>
+            <li>
+              <b className="text-[var(--text-primary)]">Flood-Risk Heuristic:</b>{" "}
+              <code className="font-mono">R = 0.40P + 0.30D + 0.30L</code> combines normalized rainfall, drainage vulnerability, and low-lying terrain as a prototype heuristic, not a validated hydrological forecast.
+            </li>
+            <li>
+              <b className="text-[var(--text-primary)]">AI Incident Triage:</b> Groq performs structured emergency report triage (with deterministic rule-based fallback); it does not forecast floods or authorize dispatch.
+            </li>
+            <li>
+              <b className="text-[var(--text-primary)]">Response Teams:</b> Registered team records and base zones are configured operational data and do not represent live fleet GPS telemetry.
+            </li>
+            <li>
+              <b className="text-[var(--text-primary)]">External Data:</b> Open-Meteo (weather data &amp; 2010–2025 archive), RainViewer (radar imagery), OpenTopoData (SRTM 90m elevation), and OpenStreetMap Overpass use caching and offline fallbacks.
+            </li>
           </ul>
         </div>
       </div>

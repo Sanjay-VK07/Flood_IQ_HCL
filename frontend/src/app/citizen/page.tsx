@@ -298,12 +298,12 @@ export default function CitizenPortalPage() {
       </header>
 
       <main className="max-w-4xl mx-auto px-4 pt-4 space-y-4">
-        {/* Live Advisory Strip */}
+        {/* Risk Advisory Strip */}
         <div className="px-3 py-2 rounded-[8px] bg-[#FEF2F2] dark:bg-[#FF5364]/15 border border-[#FCA5A5] dark:border-[#FF5364]/40 flex items-center justify-between gap-2 text-[11.5px] font-bold text-[#991B1B] dark:text-[#FF8E99]">
           <div className="flex items-center gap-2 min-w-0">
             <span className="w-2 h-2 rounded-full bg-[#DC2626] dark:bg-[#FF5364] shrink-0" />
             <span className="truncate">
-              LIVE ADVISORY: {highRiskCount} OF {riskZones.length || 5} HYDERABAD ZONES AT HIGH/CRITICAL RISK
+              FLOOD RISK ADVISORY: {highRiskCount} OF {riskZones.length || 5} HYDERABAD ZONES AT HIGH/CRITICAL RISK
             </span>
           </div>
           <span className="shrink-0 font-mono">{rainfallMm} mm</span>
@@ -348,7 +348,7 @@ export default function CitizenPortalPage() {
                     <h1 className="text-[18px] font-bold leading-snug">
                       {topZone
                         ? `${topZone.zone_name}: ${topZone.risk_level} Flood Risk`
-                        : "Hyderabad Pilot Flood Monitoring"}
+                        : "Hyderabad Urban Flood Monitoring"}
                     </h1>
                     <p className="text-[12.5px] text-white/90 mt-1">
                       {topZone
@@ -431,10 +431,10 @@ export default function CitizenPortalPage() {
             >
               <div className="flex items-center justify-between">
                 <h2 className="text-[15px] font-bold text-[var(--text-primary)]">
-                  Neighborhood Live Status
+                  Neighborhood Risk Status
                 </h2>
                 <span className="text-[11px] font-semibold text-[var(--teal)]">
-                  5 Pilot Zones
+                  5 Assessment Zones
                 </span>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
@@ -562,7 +562,7 @@ export default function CitizenPortalPage() {
                     htmlFor="citizen-zone"
                     className="block text-[11px] font-bold uppercase text-[var(--text-secondary)] mb-1"
                   >
-                    Pilot Zone
+                    Assessment Zone
                   </label>
                   <select
                     id="citizen-zone"
@@ -710,6 +710,7 @@ export default function CitizenPortalPage() {
                   />
                 </label>
                 {photoDataUrl && (
+                  /* eslint-disable-next-line @next/next/no-img-element */
                   <img
                     src={photoDataUrl}
                     alt="Uploaded flood report preview"

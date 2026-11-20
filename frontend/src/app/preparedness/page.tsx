@@ -73,7 +73,7 @@ export default function PreparednessPage() {
       <div className="grid grid-cols-1 md:grid-cols-4 gap-3 items-end">
         <div className="p-3 rounded-[4px] bg-[var(--bg-panel)] border border-[var(--border-hairline)]">
           <label className="block text-[10.5px] font-bold uppercase tracking-wider text-[var(--text-muted)] mb-1">
-            Pilot GIS Sub-Zone
+            Assessment Zone
           </label>
           <select
             value={activeZone.zone_id}
@@ -90,7 +90,7 @@ export default function PreparednessPage() {
 
         <div className="p-3 rounded-[4px] bg-[var(--bg-panel)] border border-[var(--border-hairline)]">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-semibold text-[var(--text-secondary)]">Illustrative Risk Score</span>
+            <span className="text-[11px] font-semibold text-[var(--text-secondary)]">Heuristic Risk Score</span>
             <Badge tone={tone}>{activeZone.risk_level}</Badge>
           </div>
           <div className="mt-1 text-[22px] font-bold text-[var(--text-primary)]">
@@ -111,7 +111,7 @@ export default function PreparednessPage() {
 
         <div className="p-3 rounded-[4px] bg-[var(--bg-panel)] border border-[var(--border-hairline)]">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-semibold text-[var(--text-secondary)]">Available Demo Units</span>
+            <span className="text-[11px] font-semibold text-[var(--text-secondary)]">Available Response Teams</span>
             <Badge tone={availCount > 0 ? "low" : "critical"}>Standby</Badge>
           </div>
           <div className="mt-1 text-[22px] font-bold text-[var(--text-primary)]">
@@ -205,7 +205,7 @@ export default function PreparednessPage() {
           </div>
 
           <div className="p-3.5 rounded-[4px] bg-[var(--bg-panel)] border border-[var(--border-hairline)] space-y-2">
-            <h2 className="text-[13px] font-bold text-[var(--text-primary)]">Illustrative Response Fleet</h2>
+            <h2 className="text-[13px] font-bold text-[var(--text-primary)]">Configured Response Teams</h2>
             <div className="space-y-1.5">
               {teams.map((t) => (
                 <div

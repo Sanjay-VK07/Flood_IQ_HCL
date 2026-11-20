@@ -1,7 +1,7 @@
 "use client";
 
 import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
-import { API_BASE, api, getStoredToken, setStoredToken } from "@/lib/api";
+import { api, getApiBase, getStoredToken, setStoredToken } from "@/lib/api";
 import type { AuthUser, UserRole } from "@/lib/types";
 
 interface AuthContextValue {
@@ -60,7 +60,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!token) return;
     // Clear the browser session immediately. A slow or unreachable API must not
     // trap the user on a protected portal instead of returning to role selection.
-    void fetch(`${API_BASE}/api/auth/logout`, {
+    void fetch(`${getApiBase()}/api/auth/logout`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

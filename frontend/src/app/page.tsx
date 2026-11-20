@@ -154,7 +154,8 @@ export default function CommandCenterPage() {
           <div className="flex items-baseline justify-between border-b border-[var(--border-hairline)] pb-1.5">
             <h2 className="text-[14px] font-bold text-[var(--text-primary)]">Hyderabad Urban Catchment</h2>
             <span className="text-[11px] text-[var(--text-muted)]">
-              5 Monitored Pilot Sectors &middot; {data.weather.source_label}
+              {data.zones.length} Assessment Zones &middot;{" "}
+              {isSim ? `${rainfallMm} mm Scenario` : "Open-Meteo Weather Data"}
             </span>
           </div>
           <HyderabadMap zones={data.zones} incidents={data.incidents} teams={data.teams} height={430} />
@@ -288,7 +289,9 @@ export default function CommandCenterPage() {
             <h2 className="text-[13px] font-bold text-[var(--text-primary)] flex items-center gap-1.5 whitespace-nowrap">
               <Shield className="w-3.5 h-3.5 text-[var(--teal)]" /> Response Team Availability
             </h2>
-            <span className="text-[11px] text-[var(--text-muted)] whitespace-nowrap">Illustrative demo units</span>
+            <span className="text-[11px] text-[var(--text-muted)] whitespace-nowrap">
+              {data.teams.length} registered teams
+            </span>
           </div>
           <div className="space-y-1.5">
             {data.teams.map((t) => (

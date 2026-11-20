@@ -138,7 +138,7 @@ export default function HyderabadMapInner({
                     <b>Low-Lying:</b> {z.low_lying_score}/100
                   </div>
                   <div style={{ marginTop: 4, color: "#5c707a", fontSize: 11 }}>
-                    Illustrative scenario risk score
+                    Heuristic risk assessment score
                   </div>
                 </div>
               </Popup>
@@ -196,7 +196,7 @@ export default function HyderabadMapInner({
                   <b>Status:</b> {t.status}
                 </div>
                 <div style={{ marginTop: 4, color: "#5c707a", fontSize: 11 }}>
-                  Illustrative demo unit location
+                  Configured response unit base
                 </div>
               </div>
             </Popup>

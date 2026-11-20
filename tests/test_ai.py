@@ -279,6 +279,30 @@ class TestGroqIntegrationAndFallback:
         assert res2["triage_mode"] == "rule_based"
         assert mock_client.chat.completions.create.call_count == 1
 
+    def test_groq_401_sets_invalid_api_key_status_and_falls_back(self, monkeypatch):
+        from unittest.mock import MagicMock
+        import httpx
+        import groq
+        import ai_engine
+        import config
+
+        monkeypatch.setattr(config, "GROQ_API_KEY", "gsk_invalid_test_key")
+        monkeypatch.setattr(config, "OFFLINE_MODE", False)
+
+        req = httpx.Request("POST", "https://api.groq.com/openai/v1/chat/completions")
+        resp = httpx.Response(401, request=req)
+        err = groq.AuthenticationError("Invalid API Key", response=resp, body=None)
+
+        mock_client = MagicMock()
+        mock_client.chat.completions.create.side_effect = err
+        monkeypatch.setattr(groq, "Groq", lambda **kwargs: mock_client)
+
+        res = ai_engine.triage_incident("Elderly resident stranded on roof", "Musi Riverfront")
+        assert res["triage_mode"] == "rule_based"
+        status = ai_engine.get_ai_status()
+        assert status["latest_provider_status"] == "invalid_api_key"
+        assert status["fallback_active"] is True
+
 
 @pytest.mark.skipif(
     not os.getenv("GROQ_API_KEY") or os.getenv("GROQ_API_KEY") == "your_groq_api_key_here",

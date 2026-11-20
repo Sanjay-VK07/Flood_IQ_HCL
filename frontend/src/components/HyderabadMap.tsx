@@ -56,7 +56,7 @@ export function HyderabadMap({
               <i className="w-2 h-2 rounded-[2px] bg-[#FF5364]" /> Active Incident
             </span>
             <span className="inline-flex items-center gap-1.5">
-              <i className="w-2 h-2 rounded-full bg-[#21C7B7]" /> Demo Unit
+              <i className="w-2 h-2 rounded-full bg-[#21C7B7]" /> Response Unit
             </span>
           </>
         )}

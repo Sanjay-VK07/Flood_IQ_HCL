@@ -175,3 +175,21 @@ def test_cross_role_lifecycle_and_team_rbac(client):
     assert c_tl.status_code == 200
     statuses = [u["new_status"] for u in c_tl.json()]
     assert statuses == ["Triaged", "In Review", "Team Assigned", "Acknowledged", "In Progress", "Resolved"]
+
+
+def test_unsafe_svg_photo_upload_rejected(client):
+    c1 = _login(client, "citizen@floodiq.demo", "Citizen@123")
+    resp = client.post(
+        "/api/incidents",
+        json={
+            "zone_id": "begumpet",
+            "description": "Flooding near main junction",
+            "location_text": "Begumpet Flyover",
+            "reported_category": "Road Blockage",
+            "people_affected": 1,
+            "photo_data_url": "data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=",
+        },
+        headers=c1,
+    )
+    assert resp.status_code == 400
+    assert "PNG, JPEG, WEBP, or GIF" in resp.json()["detail"]

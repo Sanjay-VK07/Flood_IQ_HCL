@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from "react";
 import { Download, RefreshCw } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, CartesianGrid } from "recharts";
-import { api, API_BASE } from "@/lib/api";
+import { api, getApiBase } from "@/lib/api";
 import type { DatasetStatusResponse, HistoricalWeatherResponse, RiskResponse } from "@/lib/types";
 import { useSimulation } from "@/context/SimulationContext";
 import { Badge, toneFromBand } from "@/components/Badge";
@@ -87,10 +87,10 @@ export default function FloodRiskPage() {
           </div>
           <h1 className="text-[19px] font-bold text-[var(--text-primary)] mt-0.5">Flood Risk Intelligence</h1>
           <p className="text-[12px] text-[var(--text-secondary)]">
-            Illustrative scenario risk scores combining rainfall, drainage capacity, and terrain elevation — not a validated hydrological model.
+            Heuristic flood-risk assessment combining rainfall, drainage capacity, and terrain elevation.
           </p>
         </div>
-        <Badge tone="moderate">Illustrative Scenario Risk Scores</Badge>
+        <Badge tone="teal">Heuristic Risk Model</Badge>
       </div>
 
       {/* Inline Scenario Presets + Slider Bar (matches Stitch 2_flood_risk.png) */}
@@ -126,7 +126,7 @@ export default function FloodRiskPage() {
         </div>
 
         <div className="flex items-center gap-3 flex-1 min-w-[240px] max-w-[420px]">
-          <span className="text-[11px] text-[var(--text-secondary)] whitespace-nowrap">Simulated Load:</span>
+          <span className="text-[11px] text-[var(--text-secondary)] whitespace-nowrap">Scenario Rainfall:</span>
           <input
             type="range"
             min={0}
@@ -138,7 +138,7 @@ export default function FloodRiskPage() {
               setRainfallMm(Number(e.target.value));
             }}
             className="w-full accent-[#21C7B7] cursor-pointer"
-            aria-label="Simulated Inundation Load (mm)"
+            aria-label="Scenario Rainfall (mm)"
           />
           <span className="text-[12px] font-bold text-[var(--teal)] whitespace-nowrap">{rainfallMm} mm</span>
         </div>
@@ -147,7 +147,7 @@ export default function FloodRiskPage() {
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-4">
         <div className="xl:col-span-6 space-y-2">
           <div className="flex items-baseline justify-between border-b border-[var(--border-hairline)] pb-1.5">
-            <h2 className="text-[14px] font-bold text-[var(--text-primary)]">Pilot Catchment Risk Zones</h2>
+            <h2 className="text-[14px] font-bold text-[var(--text-primary)]">Catchment Risk Zones</h2>
             <span className="text-[11px] text-[var(--text-muted)]">{data.source_label}</span>
           </div>
           <HyderabadMap zones={data.zones} height={425} showEntitiesLegend={false} />
@@ -380,7 +380,7 @@ export default function FloodRiskPage() {
               </p>
               <div className="flex flex-wrap gap-2 pt-1">
                 <a
-                  href={`${API_BASE}/api/dataset/download`}
+                  href={`${getApiBase()}/api/dataset/download`}
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[4px] bg-[var(--teal)] hover:bg-[var(--teal-hover)] text-[var(--teal-fg)] font-bold text-[11.5px]"
                 >
                   <Download className="w-3.5 h-3.5" />
