@@ -1032,3 +1032,799 @@ section[data-testid="stSidebar"] [data-testid="stCaptionContainer"] {
   box-shadow: 0px 1px 1px rgba(0,0,0,0.05);
   border: 1px solid rgba(44, 54, 65, 0.3);
 }
+
+
+/* ==========================================================================
+   Figma Design: Command Center Overview (Node 4:3231)
+   Palette: #0b131e, #0e1724, #111c2a, #141f2f, #2dd4bf, #fb7185, #38bdf8
+   ========================================================================== */
+.cc-header-bar {
+  background: rgba(14, 23, 36, 0.9);
+  backdrop-filter: blur(8px);
+  border: 1px solid #1e2c3f;
+  border-radius: 8px;
+  padding: 10px 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 1rem;
+}
+
+.cc-breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.cc-sim-pill {
+  background: rgba(244, 63, 94, 0.1);
+  border: 1px solid rgba(244, 63, 94, 0.25);
+  border-radius: 9999px;
+  padding: 2px 8px;
+  color: #fb7185;
+  font-size: 11px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.cc-weather-pill {
+  background: #131f2f;
+  border: 1px solid #223348;
+  border-radius: 6px;
+  padding: 4px 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #cbd5e1;
+  font-size: 12px;
+}
+
+.cc-scenario-pills {
+  background: #0a121d;
+  border: 1px solid #1e2c3f;
+  border-radius: 8px;
+  padding: 3px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.cc-time-badge {
+  color: #e2e8f0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border-left: 1px solid #1e2c3f;
+  padding-left: 10px;
+}
+
+/* 4-Column Top KPI Grid */
+.cc-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+  margin-bottom: 1rem;
+}
+
+@media (max-width: 900px) {
+  .cc-metrics-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.cc-metric-card {
+  background: #111c2a;
+  border: 1px solid #1e2c3f;
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+  position: relative;
+  overflow: hidden;
+}
+
+.cc-metric-card.critical {
+  background: #181d29;
+  border: 1px solid rgba(244, 63, 94, 0.35);
+  box-shadow: 0 0 12px rgba(244, 63, 94, 0.15);
+}
+
+.cc-metric-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.cc-metric-title {
+  color: #94a3b8;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.3px;
+}
+
+.cc-metric-val {
+  font-size: 30px;
+  font-weight: 700;
+  color: #ffffff;
+  letter-spacing: -0.8px;
+  line-height: 1.1;
+  margin-bottom: 8px;
+}
+
+.cc-metric-sub {
+  color: #94a3b8;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Priority Queue in Command Center */
+.cc-queue-panel {
+  background: #0f1825;
+  border: 1px solid #1e2c3f;
+  border-radius: 12px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.cc-queue-header {
+  border-bottom: 1px solid #1e2c3f;
+  padding-bottom: 10px;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.cc-queue-card {
+  background: #141f2f;
+  border: 1px solid #203248;
+  border-left: 4px solid #2dd4bf;
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin-bottom: 10px;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+}
+
+.cc-queue-card.critical {
+  border-left: 4px solid #f43f5e;
+  box-shadow: 0 0 8px rgba(244, 63, 94, 0.2);
+}
+
+.cc-queue-card-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.cc-queue-title {
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.cc-queue-vuln {
+  background: rgba(244, 63, 94, 0.15);
+  border: 1px solid rgba(244, 63, 94, 0.3);
+  border-radius: 4px;
+  padding: 6px 8px;
+  margin: 6px 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #fecdd3;
+  font-size: 11px;
+}
+
+.cc-queue-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: #94a3b8;
+  font-size: 11px;
+  margin-top: 4px;
+  padding-top: 6px;
+  border-top: 1px solid #1e2d42;
+}
+
+/* 3-Column Bottom Overview Grid */
+.cc-bottom-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+  margin-top: 1rem;
+}
+
+@media (max-width: 900px) {
+  .cc-bottom-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.cc-bottom-panel {
+  background: #111c2a;
+  border: 1px solid #1e2c3f;
+  border-radius: 12px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.cc-panel-head {
+  border-bottom: 1px solid #1c2c3e;
+  padding-bottom: 8px;
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.cc-panel-title {
+  color: #ffffff;
+  font-size: 12.5px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.cc-histo-wrap {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  height: 80px;
+  padding: 4px 6px;
+  margin: 8px 0;
+}
+
+.cc-histo-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  height: 100%;
+  justify-content: flex-end;
+}
+
+.cc-histo-bar {
+  background: #1b2b3d;
+  width: 28px;
+  border-radius: 4px 4px 0 0;
+  transition: height 0.3s ease;
+}
+
+.cc-histo-bar.peak {
+  background: #f43f5e;
+  box-shadow: 0 0 8px rgba(244, 63, 94, 0.4);
+}
+
+.cc-histo-bar.proj {
+  background: rgba(20, 184, 166, 0.4);
+  border: 1px dashed rgba(45, 212, 191, 0.6);
+}
+
+.cc-histo-time {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 10px;
+  color: #94a3b8;
+}
+
+.cc-chrono-feed {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 6px 0;
+}
+
+.cc-chrono-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 11px;
+}
+
+.cc-chrono-time {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  color: #64748b;
+  font-size: 10.5px;
+  flex-shrink: 0;
+}
+
+.cc-roster-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 6px 0;
+}
+
+.cc-roster-item {
+  background: #141f2d;
+  border: 1px solid #1f2f42;
+  border-radius: 4px;
+  padding: 6px 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11.5px;
+}
+
+
+/* ==========================================================================
+   Figma Design: Flood Risk Intelligence (Node 1:1715)
+   Palette: #0a141e, #131c27, #17202b, #212b36, #4fe3d3, #ffb4ab, #ff9498
+   ========================================================================== */
+.ri-ribbon {
+  background: #131c27;
+  border-radius: 2px;
+  padding: 8px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  box-shadow: 0 1px 1px rgba(0,0,0,0.05);
+  border: 1px solid rgba(44, 54, 65, 0.3);
+  margin-bottom: 8px;
+}
+
+.ri-disclaimer-box {
+  background: rgba(5, 15, 25, 0.9);
+  border: 1px solid rgba(255, 180, 171, 0.25);
+  border-radius: 2px;
+  padding: 4px 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+}
+
+.ri-control-bar {
+  background: #17202b;
+  border-radius: 2px;
+  padding: 8px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  border: 1px solid rgba(44, 54, 65, 0.3);
+  margin-bottom: 10px;
+}
+
+.ri-cockpit-grid {
+  display: grid;
+  grid-template-columns: 1.2fr 0.8fr;
+  gap: 10px;
+  margin-bottom: 1rem;
+}
+
+@media (max-width: 1024px) {
+  .ri-cockpit-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.ri-card {
+  background: #17202b;
+  border-radius: 2px;
+  padding: 12px;
+  border: 1px solid rgba(44, 54, 65, 0.3);
+  margin-bottom: 8px;
+  box-shadow: 0 1px 1px rgba(0,0,0,0.05);
+}
+
+.ri-card.focus-basin {
+  background: #212b36;
+  border: 1px solid rgba(255, 180, 171, 0.3);
+}
+
+.ri-formula-box {
+  background: #050f19;
+  border-radius: 2px;
+  padding: 8px 10px;
+  margin: 6px 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11px;
+  color: #4fe3d3;
+  line-height: 1.5;
+  border: 1px solid rgba(79, 227, 211, 0.2);
+}
+
+.ri-metric-row {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-bottom: 6px;
+}
+
+.ri-metric-bar-bg {
+  background: #050f19;
+  height: 6px;
+  border-radius: 12px;
+  overflow: hidden;
+  position: relative;
+}
+
+.ri-metric-bar-fill {
+  height: 100%;
+  border-radius: 12px;
+  background: #ffb4ab;
+}
+
+/* ==========================================================================
+   MODULE 3 / RESPONSE CONTROL ROOM (FIGMA NODE 1:2646)
+   ========================================================================== */
+
+.rcr-sub-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  background: #131c27;
+  padding: 8px 14px;
+  border-radius: 4px;
+  border-left: 3px solid #4fe3d3;
+  margin-bottom: 0.75rem;
+}
+
+.rcr-telemetry-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #0a141e;
+  padding: 4px 10px;
+  border-radius: 4px;
+  border: 1px solid rgba(79, 227, 211, 0.25);
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: 11px;
+}
+
+.rcr-card {
+  background: #17202b;
+  border: 1px solid rgba(44, 54, 65, 0.45);
+  border-radius: 4px;
+  padding: 12px 14px;
+  margin-bottom: 10px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+}
+
+.rcr-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid rgba(44, 54, 65, 0.4);
+}
+
+.rcr-queue-item {
+  background: #131c27;
+  border: 1px solid rgba(44, 54, 65, 0.5);
+  border-radius: 4px;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease-in-out;
+}
+
+.rcr-queue-item:hover {
+  background: #1a2533;
+  border-color: #4fe3d3;
+}
+
+.rcr-queue-item.active {
+  background: #172535;
+  border-left: 3px solid #ffb4ab;
+  border-color: rgba(79, 227, 211, 0.6);
+}
+
+.rcr-sensor-strip {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin: 10px 0;
+}
+
+.rcr-sensor-item {
+  background: #0d1722;
+  border: 1px solid rgba(44, 54, 65, 0.5);
+  border-radius: 3px;
+  padding: 6px 8px;
+  text-align: center;
+}
+
+.rcr-stepper {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  position: relative;
+  margin: 14px 0 16px 0;
+  padding: 0 10px;
+}
+
+.rcr-stepper::before {
+  content: "";
+  position: absolute;
+  top: 14px;
+  left: 30px;
+  right: 30px;
+  height: 2px;
+  background: #2c3641;
+  z-index: 1;
+}
+
+.rcr-step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+  z-index: 2;
+  font-size: 10px;
+  color: #859491;
+  gap: 4px;
+}
+
+.rcr-step-circle {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: #131c27;
+  border: 2px solid #2c3641;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  color: #bbcac6;
+}
+
+.rcr-step.completed .rcr-step-circle {
+  background: #004f58;
+  border-color: #4fe3d3;
+  color: #4fe3d3;
+}
+
+.rcr-step.active .rcr-step-circle {
+  background: #4fe3d3;
+  border-color: #4fe3d3;
+  color: #00363d;
+  font-weight: 700;
+}
+
+.rcr-step.active {
+  color: #4fe3d3;
+  font-weight: 600;
+}
+
+.rcr-vuln-banner {
+  background: rgba(255, 180, 171, 0.08);
+  border: 1px solid rgba(255, 180, 171, 0.35);
+  border-left: 3px solid #ffb4ab;
+  padding: 8px 12px;
+  border-radius: 3px;
+  margin: 8px 0;
+  font-size: 11.5px;
+  color: #ffdad6;
+}
+
+/* ==========================================================================
+   MODULE 4 / CITIZEN REPORTING & TRIAGE (FIGMA NODE 1:2241)
+   ========================================================================== */
+
+.cr-sub-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  background: #131c27;
+  padding: 8px 14px;
+  border-radius: 4px;
+  border-left: 3px solid #38bdf8;
+  margin-bottom: 0.75rem;
+}
+
+.cr-card {
+  background: #17202b;
+  border: 1px solid rgba(44, 54, 65, 0.45);
+  border-radius: 4px;
+  padding: 14px 16px;
+  margin-bottom: 10px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+}
+
+.cr-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid rgba(44, 54, 65, 0.4);
+}
+
+.cr-preset-btn {
+  background: #0d1722;
+  border: 1px solid rgba(44, 54, 65, 0.5);
+  border-radius: 3px;
+  padding: 6px 10px;
+  font-size: 11px;
+  color: #bbcac6;
+  cursor: pointer;
+  transition: all 0.15s ease-in-out;
+  text-align: left;
+}
+
+.cr-preset-btn:hover {
+  background: #1a2533;
+  border-color: #38bdf8;
+  color: #d9e3f2;
+}
+
+.cr-flag-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(56, 189, 248, 0.12);
+  color: #38bdf8;
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  font-size: 10.5px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 3px;
+}
+
+.cr-flag-tag.critical {
+  background: rgba(255, 180, 171, 0.12);
+  color: #ffb4ab;
+  border-color: rgba(255, 180, 171, 0.35);
+}
+
+.cr-standby-box {
+  background: #0d1722;
+  border: 1px dashed rgba(44, 54, 65, 0.6);
+  border-radius: 4px;
+  padding: 24px 20px;
+  text-align: center;
+  color: #859491;
+  font-size: 12px;
+}
+
+/* ==========================================================================
+   MODULE 5 / PREPAREDNESS & READINESS (FIGMA NODE 1:1258)
+   ========================================================================== */
+
+.prep-sub-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  background: #131c27;
+  padding: 8px 14px;
+  border-radius: 4px;
+  border-left: 3px solid #ffb4ab;
+  margin-bottom: 0.75rem;
+}
+
+.prep-sop-card {
+  background: #131c27;
+  border: 1px solid rgba(44, 54, 65, 0.5);
+  border-radius: 4px;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  transition: all 0.15s ease-in-out;
+}
+
+.prep-sop-card:hover {
+  background: #1a2533;
+  border-color: rgba(79, 227, 211, 0.5);
+}
+
+.prep-sop-card.completed {
+  border-left: 3px solid #4fe3d3;
+  background: #0f1c26;
+}
+
+.prep-resource-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 10px;
+  background: #0d1722;
+  border: 1px solid rgba(44, 54, 65, 0.4);
+  border-radius: 3px;
+  margin-bottom: 6px;
+  font-size: 11.5px;
+}
+
+/* ==========================================================================
+   MODULE 7 / SYSTEM INFORMATION & ARCHITECTURE (FIGMA NODE 1:619)
+   ========================================================================== */
+
+.sys-sub-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  background: #131c27;
+  padding: 8px 14px;
+  border-radius: 4px;
+  border-left: 3px solid #a0c9ff;
+  margin-bottom: 0.75rem;
+}
+
+.sys-matrix-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-bottom: 1rem;
+}
+
+@media (max-width: 1024px) {
+  .sys-matrix-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.sys-card {
+  background: #17202b;
+  border: 1px solid rgba(44, 54, 65, 0.45);
+  border-radius: 4px;
+  padding: 12px 14px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+}
+
+.sys-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid rgba(44, 54, 65, 0.4);
+}
+
+.sys-flow-box {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  background: #0d1722;
+  border: 1px solid rgba(44, 54, 65, 0.5);
+  border-radius: 4px;
+  padding: 12px 16px;
+  margin: 12px 0;
+  overflow-x: auto;
+}
+
+.sys-flow-node {
+  background: #172535;
+  border: 1px solid rgba(79, 227, 211, 0.35);
+  border-radius: 4px;
+  padding: 8px 12px;
+  font-size: 11px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.sys-flow-arrow {
+  color: #4fe3d3;
+  font-weight: 700;
+  font-size: 14px;
+}

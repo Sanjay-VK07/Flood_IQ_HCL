@@ -25,6 +25,8 @@ env/
 
 # Database (generated at runtime)
 *.db
+*.db-shm
+*.db-wal
 
 # OS
 .DS_Store
