@@ -46,6 +46,10 @@ from risk_engine import evaluate_zones, get_risk_summary
 from ui_components import (
     badge_html,
     band_from_score,
+    build_audit_packet_jsonld,
+    compute_audit_hash,
+    get_canonical_audit_records,
+    get_figma_icon_uri,
     render_map_legend,
     render_page_header,
     render_section_heading,
@@ -1040,64 +1044,494 @@ elif nav_option == "Response Control Room":
 # ===========================================================================
 
 elif nav_option == "Incident History":
-    render_page_header(
-        title="Incident Audit Trail & History",
-        subtitle="Chronological transaction log of reports, operator reviews, dispatches, and resolutions.",
-        mode_label=mode_label,
-        mode_tone=mode_tone,
-    )
-
-    all_incidents = list_incidents()
+    # -----------------------------------------------------------------------
+    # Canonical & Live Data Assembly
+    # -----------------------------------------------------------------------
+    canonical_records = get_canonical_audit_records()
+    db_incidents = list_incidents()
     teams = get_response_teams()
     team_name_by_id = {t["team_id"]: t["team_name"] for t in teams}
 
-    col_flt1, col_flt2 = st.columns(2)
-    with col_flt1:
-        status_flt = st.selectbox("Filter by Status:", ["All"] + list(STATUS_TRANSITIONS.keys()))
-    with col_flt2:
-        zone_flt_options = {"All": "All"} | {z["zone_name"]: z["zone_id"] for z in zones_data}
-        zone_flt_label = st.selectbox("Filter by Zone:", list(zone_flt_options.keys()))
-        zone_flt = zone_flt_options[zone_flt_label]
+    # Integrate user-created database incidents into ledger
+    canonical_ids = {r["incident_id"] for r in canonical_records}
+    merged_records = list(canonical_records)
 
-    filtered = all_incidents
-    if status_flt != "All":
-        filtered = [i for i in filtered if i["status"] == status_flt]
-    if zone_flt != "All":
-        filtered = [i for i in filtered if i["zone_id"] == zone_flt]
+    for inc in db_incidents:
+        inc_id = inc.get("incident_id", "")
+        # If incident is not already in canonical records, add dynamic representation
+        if inc_id not in canonical_ids and not any(r["incident_id"].endswith(inc_id[-4:]) for r in canonical_records):
+            sev = band_from_score(inc.get("priority_score", 0)).upper()
+            sev_class = sev.lower()
+            z_label = zone_name_by_id.get(inc.get("zone_id", ""), inc.get("zone_id", "Unknown").replace("_", " ").title())
+            assigned_unit = team_name_by_id.get(inc.get("assigned_team_id"), inc.get("assigned_team_id") or "Unassigned")
+            created_str = inc.get("created_at", "")[:19].replace("T", " ") if inc.get("created_at") else "Live"
+            
+            # Synthesize updates into milestones
+            db_updates = get_incident_updates(inc_id)
+            milestones = [
+                {
+                    "time": created_str + " IST",
+                    "time_diff": "",
+                    "badge": "TELEMETRY INGEST",
+                    "badge_style": "background:#212b36; color:#859491;",
+                    "node_class": "node-ingest",
+                    "icon": "icon_intake.svg",
+                    "title": "Incident Logged via Intake Console",
+                    "desc": inc.get("description", "Disaster intake report filed."),
+                    "meta_icon": "icon_pin.svg",
+                    "meta": f"Zone: {z_label} • Category: {inc.get('reported_category', 'General')}",
+                },
+                {
+                    "time": created_str + " IST (+15s)",
+                    "time_diff": "(+15s)",
+                    "badge": "AUTOMATED LLM",
+                    "badge_style": "background:rgba(160,201,255,0.2); color:#a0c9ff;",
+                    "node_class": "node-llm",
+                    "icon": "icon_ai.svg",
+                    "title": "AI Triage Assessment Completed",
+                    "desc": inc.get("ai_rationale") or f"Assessed as {inc.get('ai_category', 'Emergency')} with priority score {inc.get('priority_score', 0):.0f}/100.",
+                    "meta_icon": "icon_sparkle.svg",
+                    "meta": f"Priority Score: {inc.get('priority_score', 0):.0f}/100 • Urgency: {inc.get('ai_urgency', 'High')}",
+                },
+            ]
+            
+            for idx, u in enumerate(db_updates):
+                old_s = u.get("old_status") or "Reported"
+                new_s = u.get("new_status") or "Updated"
+                note_s = u.get("note") or f"Status shifted from {old_s} to {new_s}."
+                u_time = u.get("updated_at", "")[:19].replace("T", " ") if u.get("updated_at") else ""
+                milestones.append({
+                    "time": u_time + " IST",
+                    "time_diff": f"(Update #{idx+1})",
+                    "badge": "COMMAND OVERSIGHT" if "Review" in new_s else "EXECUTED DISPATCH",
+                    "badge_style": "background:#4fe3d3; color:#003732; font-weight:700;" if "Dispatched" in new_s or "Resolved" in new_s else "background:rgba(79,227,211,0.2); color:#4fe3d3;",
+                    "node_class": "node-dispatch" if "Dispatched" in new_s or "Resolved" in new_s else "node-command",
+                    "icon": "icon_check.svg" if "Dispatched" in new_s or "Resolved" in new_s else "icon_shield.svg",
+                    "title": f"Status Updated: {old_s} → {new_s}",
+                    "desc": note_s,
+                    "meta_icon": "icon_radio.svg",
+                    "meta": f"Assigned: {assigned_unit}",
+                })
 
-    st.caption(f"Showing **{len(filtered)}** incident(s), ordered by priority.")
+            merged_records.append({
+                "incident_id": f"#{inc_id}",
+                "severity": sev,
+                "severity_class": sev_class,
+                "zone_id": inc.get("zone_id", ""),
+                "zone_label": z_label,
+                "priority_score": int(inc.get("priority_score", 50)),
+                "location_title": inc.get("location_text") or "Reported Location",
+                "location_text": inc.get("location_text") or "Reported Location",
+                "gps": f"Zone {inc.get('zone_id', '')}",
+                "marker": "Municipal Sector Hyd-West",
+                "category_summary": inc.get("reported_category", "Emergency Incident"),
+                "status": inc.get("status", "Triaged").upper(),
+                "active_time": f"Logged {created_str}",
+                "reported_time": created_str,
+                "priority_tier": f"Tier {1 if sev == 'CRITICAL' else 2 if sev == 'HIGH' else 3}",
+                "sensor": "TELEMETRY-STREAM",
+                "assigned_unit": assigned_unit,
+                "inundation_m": 0.85,
+                "flow_velocity": "1.5 m/sec",
+                "icon_type": "icon_rescue.svg" if "Rescue" in inc.get("reported_category", "") else "icon_ambulance.svg",
+                "is_canonical": False,
+                "milestones": milestones,
+            })
 
-    if not filtered:
-        st.info("No incidents match the selected filters.")
-    else:
-        for inc in filtered:
-            z_label = zone_name_by_id.get(inc["zone_id"], inc["zone_id"].replace("_", " ").title())
-            t_label = team_name_by_id.get(inc["assigned_team_id"], inc["assigned_team_id"]) if inc.get("assigned_team_id") else "None"
-            created_disp = inc["created_at"][:19].replace("T", " ") + " UTC" if inc.get("created_at") else "N/A"
-            cat_label = inc["ai_category"] or inc["reported_category"]
+    # Selection State Management
+    if "selected_audit_inc_id" not in st.session_state:
+        st.session_state["selected_audit_inc_id"] = "#INC-2024-0941"
 
-            with st.expander(f"{inc['incident_id']} — {cat_label} | {inc['status']} | Priority {inc['priority_score']:.0f}/100"):
-                st.markdown(f"**Zone:** {z_label} | **Location:** {inc['location_text'] or 'N/A'}")
-                st.markdown(f"**Description:** {inc['description']}")
-                st.markdown(f"**Assigned Team:** {t_label} | **Logged:** {created_disp}")
+    # Verify selected ID is present, else default
+    record_map = {r["incident_id"]: r for r in merged_records}
+    if st.session_state["selected_audit_inc_id"] not in record_map:
+        st.session_state["selected_audit_inc_id"] = merged_records[0]["incident_id"]
 
-                st.markdown("**Chronological Audit Timeline**")
-                updates = get_incident_updates(inc["incident_id"])
-                for u in updates:
-                    u_time = u["updated_at"][:19].replace("T", " ") + " UTC" if u.get("updated_at") else ""
-                    old_s = html.escape(u["old_status"] or "Created")
-                    new_s = html.escape(u["new_status"] or "")
-                    note_s = html.escape(u["note"] or "")
-                    st.markdown(
-                        f"""
-                        <div class="timeline-item">
-                            <span class="timeline-time">{u_time}</span><br>
-                            <b>{old_s} &rarr; {new_s}</b><br>
-                            <span style="font-size:0.8rem; color:var(--ink-2);">{note_s}</span>
+    selected_rec = record_map[st.session_state["selected_audit_inc_id"]]
+
+    # Compute live SHA-256 integrity hash for selected record
+    sha256_hash = compute_audit_hash(selected_rec["incident_id"], selected_rec["milestones"])
+    jsonld_packet = build_audit_packet_jsonld(selected_rec, selected_rec["milestones"], sha256_hash)
+
+    # -----------------------------------------------------------------------
+    # Sub-Header & Global Chronometer Breadcrumb (Figma Node 1:5)
+    # -----------------------------------------------------------------------
+    icon_archive_uri = get_figma_icon_uri("icon_archive.svg")
+    icon_export_uri = get_figma_icon_uri("icon_export.svg")
+
+    st.markdown(
+        f"""
+        <div class="tactical-sub-header">
+            <div class="tactical-breadcrumb-left">
+                <div class="tactical-icon-box">
+                    <img src="{icon_archive_uri}" width="16" height="16" alt="Archive" />
+                </div>
+                <div class="tactical-breadcrumb-copy">
+                    <div class="tactical-breadcrumb-crumbs">
+                        <span class="tactical-crumbs-muted">OPERATIONAL ARCHIVE</span>
+                        <span class="tactical-crumbs-muted">/</span>
+                        <span class="tactical-crumbs-accent">INCIDENT HISTORY</span>
+                    </div>
+                    <h2 class="tactical-screen-title">Incident History / Audit Trail & Chronological Timeline</h2>
+                </div>
+            </div>
+            <div class="tactical-header-actions">
+                <div class="tactical-stream-badge">
+                    <span class="tactical-stream-dot"></span>
+                    <span>STREAM: SECURE_APPEND_ONLY</span>
+                </div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    # Download button for JSON-LD Audit Packet
+    col_dl_space, col_dl_btn = st.columns([0.7, 0.3])
+    with col_dl_btn:
+        st.download_button(
+            label="EXPORT AUDIT PACKET (JSON-LD)",
+            data=jsonld_packet,
+            file_name=f"floodiq-audit-packet-{selected_rec['incident_id'].lstrip('#')}.jsonld",
+            mime="application/ld+json",
+            help="Download cryptographically fingerprinted W3C / schema.org EmergencyService audit trail.",
+            use_container_width=True,
+        )
+
+    # -----------------------------------------------------------------------
+    # Tactical Multi-Parameter Filter Toolbar (Figma Node 1:30)
+    # -----------------------------------------------------------------------
+    icon_zone_uri = get_figma_icon_uri("icon_zone.svg")
+    icon_sev_uri = get_figma_icon_uri("icon_severity.svg")
+    icon_stat_uri = get_figma_icon_uri("icon_status.svg")
+    icon_seed_uri = get_figma_icon_uri("icon_seed.svg")
+    icon_search_uri = get_figma_icon_uri("icon_search.svg")
+
+    with st.container():
+        st.markdown('<div class="tactical-filter-bar">', unsafe_allow_html=True)
+        col_f1, col_f2, col_f3, col_f4, col_f5 = st.columns([2.2, 2.0, 2.0, 2.4, 3.4])
+
+        with col_f1:
+            st.markdown(
+                f'<span class="tactical-filter-label"><img src="{icon_zone_uri}" width="12" style="vertical-align:middle; margin-right:4px;" />ZONE CONSTRAINT</span>',
+                unsafe_allow_html=True,
+            )
+            zone_options = ["All Zones (Hyderabad Pilot)", "Zone 1 / Musi Basin", "Zone 2 / Shaikpet Corridor", "Zone 2 / Metro Corridor", "Zone 3 / Rasoolpura Stream"]
+            sel_zone = st.selectbox("Zone Constraint", zone_options, label_visibility="collapsed")
+
+        with col_f2:
+            st.markdown(
+                f'<span class="tactical-filter-label"><img src="{icon_sev_uri}" width="12" style="vertical-align:middle; margin-right:4px;" />SEVERITY BRACKET</span>',
+                unsafe_allow_html=True,
+            )
+            sev_options = ["All Severities", "Critical", "High", "Moderate", "Low"]
+            sel_sev = st.selectbox("Severity Bracket", sev_options, label_visibility="collapsed")
+
+        with col_f3:
+            st.markdown(
+                f'<span class="tactical-filter-label"><img src="{icon_stat_uri}" width="12" style="vertical-align:middle; margin-right:4px;" />TRIAGE LIFECYCLE</span>',
+                unsafe_allow_html=True,
+            )
+            stat_options = ["All Statuses", "Under Review / Assigned", "In Transit", "Resolved", "Triaged"]
+            sel_stat = st.selectbox("Triage Lifecycle", stat_options, label_visibility="collapsed")
+
+        with col_f4:
+            st.markdown(
+                f'<span class="tactical-filter-label"><img src="{icon_seed_uri}" width="12" style="vertical-align:middle; margin-right:4px;" />SCENARIO SEED</span>',
+                unsafe_allow_html=True,
+            )
+            scenario_options = ["Active: 50mm Monsoon", "Severe 100mm Cloudburst", "Normal 20mm Rainfall"]
+            sel_scenario = st.selectbox("Scenario Seed", scenario_options, label_visibility="collapsed")
+
+        with col_f5:
+            st.markdown(
+                f'<span class="tactical-filter-label"><img src="{icon_search_uri}" width="12" style="vertical-align:middle; margin-right:4px;" />QUICK SEARCH QUERY <span class="tactical-search-shortcut">⌘K</span></span>',
+                unsafe_allow_html=True,
+            )
+            search_query = st.text_input("Quick Search Query", placeholder="Search Chadarghat, #INC-2024, SDRF...", label_visibility="collapsed")
+
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    # Filtering logic
+    filtered_records = []
+    for r in merged_records:
+        # Zone filter
+        if sel_zone != "All Zones (Hyderabad Pilot)":
+            z_term = sel_zone.split(" / ")[-1].lower() if " / " in sel_zone else sel_zone.lower()
+            if z_term not in r["zone_label"].lower() and z_term not in r["zone_id"].lower():
+                continue
+        # Severity filter
+        if sel_sev != "All Severities":
+            if r["severity"].upper() != sel_sev.upper():
+                continue
+        # Status filter
+        if sel_stat != "All Statuses":
+            if sel_stat.lower() not in r["status"].lower():
+                continue
+        # Search query
+        if search_query.strip():
+            sq = search_query.strip().lower()
+            corpus = f"{r['incident_id']} {r['location_title']} {r['location_text']} {r['category_summary']} {r['assigned_unit']} {r['zone_label']}".lower()
+            if sq not in corpus:
+                continue
+        filtered_records.append(r)
+
+    if not filtered_records:
+        filtered_records = merged_records
+
+    # -----------------------------------------------------------------------
+    # Primary Tactical 2-Pane Console (50% / 50% Desktop Grid)
+    # -----------------------------------------------------------------------
+    col_left_pane, col_right_pane = st.columns([1, 1], gap="small")
+
+    # LEFT PANE: Master Incident Log Table
+    with col_left_pane:
+        icon_ledger_uri = get_figma_icon_uri("icon_ledger.svg")
+        st.markdown(
+            f"""
+            <div class="tactical-pane">
+                <div class="tactical-pane-header">
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <img src="{icon_ledger_uri}" width="14" height="14" alt="Ledger" />
+                        <div>
+                            <span style="color:#d9e3f2; font-size:15px; font-weight:700; letter-spacing:-0.2px;">Historical Incident Ledger</span>
+                            <span style="color:#859491; font-size:10px; margin-left:6px;">({html.escape(sel_scenario)})</span>
                         </div>
-                        """,
-                        unsafe_allow_html=True,
-                    )
+                    </div>
+                    <span class="tactical-sync-badge">SYNC: NOMINAL</span>
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        for rec in filtered_records:
+            is_active = (rec["incident_id"] == selected_rec["incident_id"])
+            active_class = "active" if is_active else ""
+            sev_class = rec["severity_class"]
+            icon_cat_uri = get_figma_icon_uri(rec.get("icon_type", "icon_rescue.svg"))
+            icon_chevron_uri = get_figma_icon_uri("icon_chevron.svg")
+
+            score_color = "#ffbdbe" if rec["priority_score"] >= 75 else "#a0c9ff" if rec["priority_score"] >= 50 else "#4fe3d3"
+            status_color = "#ffbdbe" if "ASSIGNED" in rec["status"] or "CRITICAL" in rec["severity"] else "#4fe3d3"
+
+            card_html = f"""
+            <div class="tactical-record-card {active_class}">
+                <div class="tactical-record-bar {sev_class}"></div>
+                <div class="tactical-record-row1">
+                    <div style="display:flex; align-items:center; gap:6px;">
+                        <span class="tactical-rec-id">{rec['incident_id']}</span>
+                        <span class="tactical-sev-badge tactical-sev-{sev_class}">
+                            <span style="width:6px; height:6px; border-radius:50%; background:{score_color}; display:inline-block;"></span>
+                            {rec['severity']}
+                        </span>
+                        <span style="color:#859491; font-size:10px;">{rec['zone_label']}</span>
+                    </div>
+                    <div style="display:flex; align-items:center; gap:6px;">
+                        <span style="color:#859491; font-size:10px;">PRIORITY TRIAGE</span>
+                        <span class="tactical-score-pill" style="color:{score_color};">{rec['priority_score']}</span>
+                    </div>
+                </div>
+                <div class="tactical-record-row2">
+                    <div>
+                        <div class="tactical-record-title">{rec['location_title']}</div>
+                        <div class="tactical-record-desc">
+                            <img src="{icon_cat_uri}" width="12" height="12" style="vertical-align:middle;" />
+                            <span>{rec['category_summary']}</span>
+                        </div>
+                    </div>
+                    <div style="text-align:right;">
+                        <div class="tactical-record-status" style="color:{status_color};">{rec['status']}</div>
+                        <div style="color:#859491; font-size:10px;">{rec['active_time']}</div>
+                    </div>
+                </div>
+                <div class="tactical-record-subbar">
+                    <div style="display:flex; align-items:center; gap:12px;">
+                        <span style="color:#bbcac6;">Sensor: <strong style="color:#d9e3f2;">{rec['sensor']}</strong></span>
+                        <span style="color:#bbcac6;">Units: <strong style="color:#4fe3d3;">{rec['assigned_unit']}</strong></span>
+                    </div>
+                    <div style="display:flex; align-items:center; gap:4px; color:#4fe3d3; font-weight:600;">
+                        <span>{'Viewing Audit Trace' if is_active else 'Select'}</span>
+                        <img src="{icon_chevron_uri}" width="10" height="10" />
+                    </div>
+                </div>
+            </div>
+            """
+            st.markdown(card_html, unsafe_allow_html=True)
+            if not is_active:
+                if st.button(f"Inspect Audit Record: {rec['incident_id']}", key=f"btn_select_{rec['incident_id']}", use_container_width=True):
+                    st.session_state["selected_audit_inc_id"] = rec["incident_id"]
+                    st.rerun()
+
+    # RIGHT PANE: Chronological Event Timeline for Selected Incident
+    with col_right_pane:
+        icon_timeline_uri = get_figma_icon_uri("icon_timeline.svg")
+        icon_clock_uri = get_figma_icon_uri("icon_clock.svg")
+        icon_unit_uri = get_figma_icon_uri("icon_unit.svg")
+        icon_location_uri = get_figma_icon_uri("icon_location.svg")
+        icon_hash_uri = get_figma_icon_uri("icon_hash.svg")
+
+        st.markdown(
+            f"""
+            <div class="tactical-pane">
+                <div class="tactical-timeline-header">
+                    <div style="display:flex; align-items:center; justify-content:space-between;">
+                        <div style="display:flex; align-items:center; gap:8px;">
+                            <div style="background:rgba(255,148,152,0.25); border-radius:2px; width:28px; height:28px; display:flex; align-items:center; justify-content:center;">
+                                <img src="{icon_timeline_uri}" width="14" height="14" alt="Timeline" />
+                            </div>
+                            <div>
+                                <div style="color:#d9e3f2; font-size:15px; font-weight:700; letter-spacing:-0.2px;">Incident Audit Trail: {selected_rec['incident_id']}</div>
+                                <div style="color:#859491; font-size:10px; letter-spacing:0.4px;">CHAIN-OF-CUSTODY IMMUTABLE EVENT SEQUENCE</div>
+                            </div>
+                        </div>
+                        <div style="background:rgba(255,189,190,0.2); border:1px solid rgba(255,189,190,0.4); border-radius:2px; padding:3px 6px; color:#ffbdbe; font-size:10px; font-weight:700; letter-spacing:0.5px;">
+                            {'DISPATCH ACTIVE' if 'ASSIGNED' in selected_rec['status'] else selected_rec['status']}
+                        </div>
+                    </div>
+                    <div class="tactical-pill-strip">
+                        <div style="display:flex; align-items:center; gap:4px;">
+                            <img src="{icon_clock_uri}" width="12" height="12" />
+                            <span>Reported: <strong>{selected_rec['reported_time']}</strong></span>
+                        </div>
+                        <span style="color:#3c4947;">•</span>
+                        <span style="color:#ffbdbe; font-weight:700;">{selected_rec['priority_tier']}</span>
+                        <span style="color:#3c4947;">•</span>
+                        <span>Triage Score: <strong style="color:#ffbdbe;">{selected_rec['priority_score']}/100</strong></span>
+                        <span style="color:#3c4947;">•</span>
+                        <div style="display:flex; align-items:center; gap:4px;">
+                            <img src="{icon_unit_uri}" width="12" height="12" />
+                            <span>Assigned: <strong style="color:#4fe3d3;">{selected_rec['assigned_unit']}</strong></span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="tactical-reticle-card">
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <div style="background:#212b36; border-radius:2px; width:36px; height:40px; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+                            <img src="{icon_location_uri}" width="22" height="22" alt="Reticle" />
+                        </div>
+                        <div>
+                            <div style="color:#d9e3f2; font-size:12px; font-weight:700; letter-spacing:0.4px;">{selected_rec['location_text']}</div>
+                            <div style="color:#859491; font-size:10px;">GPS: {selected_rec['gps']} • {selected_rec['marker']}</div>
+                        </div>
+                    </div>
+                    <div style="text-align:right;">
+                        <div style="color:#ffbdbe; font-size:10px; font-weight:700;">CURRENT INUNDATION: {selected_rec['inundation_m']}m</div>
+                        <div style="color:#859491; font-size:10px;">Velocity: {selected_rec['flow_velocity']}</div>
+                    </div>
+                </div>
+
+                <div class="tactical-timeline-body">
+                    <div class="tactical-timeline-track"></div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        # Render each Milestone
+        for m in selected_rec["milestones"]:
+            node_icon_uri = get_figma_icon_uri(m["icon"])
+            meta_icon_uri = get_figma_icon_uri(m.get("meta_icon", "")) if m.get("meta_icon") else ""
+
+            meta_html = ""
+            if m.get("meta"):
+                icon_tag = f'<img src="{meta_icon_uri}" width="10" height="10" style="vertical-align:middle; margin-right:4px;" />' if meta_icon_uri else ""
+                meta_html = f'<div class="tactical-milestone-meta">{icon_tag}<span>{m["meta"]}</span></div>'
+
+            progress_html = ""
+            if "progress_eta" in m:
+                progress_html = f"""
+                <div class="tactical-progress-wrap">
+                    <div style="display:flex; align-items:center; justify-content:space-between; font-size:10px;">
+                        <span style="color:#859491;">ETA TO WATER CONTACT:</span>
+                        <span style="color:#4fe3d3; font-weight:700;">{m['progress_eta']}</span>
+                    </div>
+                    <div class="tactical-progress-bar">
+                        <div class="tactical-progress-fill" style="width:{m.get('progress_pct', 72)}%;"></div>
+                    </div>
+                </div>
+                """
+
+            m_html = f"""
+            <div class="tactical-milestone">
+                <div class="tactical-milestone-node {m['node_class']}">
+                    <img src="{node_icon_uri}" width="12" height="12" alt="Milestone" />
+                </div>
+                <div class="tactical-milestone-card">
+                    <div class="tactical-milestone-top">
+                        <div style="display:flex; align-items:center; gap:6px;">
+                            <span style="color:#859491; font-size:10px; font-weight:600;">{m['time']}</span>
+                            <span style="color:#a0c9ff; font-size:10px;">{m.get('time_diff', '')}</span>
+                        </div>
+                        <span style="{m['badge_style']} border-radius:2px; padding:2px 5px; font-size:9px; letter-spacing:0.4px;">
+                            {m['badge']}
+                        </span>
+                    </div>
+                    <div class="tactical-milestone-title">{m['title']}</div>
+                    <div class="tactical-milestone-desc">{m['desc']}</div>
+                    {meta_html}
+                    {progress_html}
+                </div>
+            </div>
+            """
+            st.markdown(m_html, unsafe_allow_html=True)
+
+        # Regulatory Audit Footer & Disclaimer (Figma Node 1:350)
+        sha_display = f"{sha256_hash[:8]}...{sha256_hash[-6:]}"
+        st.markdown(
+            f"""
+                </div>
+                <div class="tactical-audit-footer">
+                    <div style="display:flex; align-items:center; justify-content:space-between;">
+                        <div style="display:flex; align-items:center; gap:6px;">
+                            <img src="{icon_hash_uri}" width="12" height="12" alt="SHA" />
+                            <span style="color:#859491; font-size:10px;">SHA-256 Ledger Hash: <strong style="color:#d9e3f2;">{sha_display}</strong></span>
+                        </div>
+                        <span style="color:#4fe3d3; font-size:10px; font-weight:600;">VALIDATED INTEGRITY</span>
+                    </div>
+                    <div style="color:#859491; font-size:10px; font-style:italic;">Prototype demonstration workflow. All logs reflect mock operational data.</div>
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    # -----------------------------------------------------------------------
+    # Operational Decision Review Console (Bottom Utility Strip) (Figma Node 1:480)
+    # -----------------------------------------------------------------------
+    icon_sop_uri = get_figma_icon_uri("icon_sop.svg")
+    icon_dispatcher_uri = get_figma_icon_uri("icon_dispatcher.svg")
+
+    st.markdown(
+        f"""
+        <div class="tactical-bottom-strip">
+            <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+                <div style="display:flex; align-items:center; gap:6px;">
+                    <img src="{icon_sop_uri}" width="14" height="14" alt="SOP" />
+                    <div>
+                        <span style="color:#4fe3d3; font-size:10px; font-weight:700;">STANDARD OPERATING PROCEDURE:</span>
+                        <span style="color:#d9e3f2; font-size:10px; margin-left:4px;">GHMC Flood Protocol Tier-4 (Swiftwater Protocol 11-A)</span>
+                    </div>
+                </div>
+                <span style="color:#3c4947;">|</span>
+                <div style="display:flex; align-items:center; gap:6px;">
+                    <img src="{icon_dispatcher_uri}" width="14" height="14" alt="Dispatcher" />
+                    <span style="color:#859491; font-size:10px;">Lead Dispatcher: <strong style="color:#d9e3f2;">Sub-Cmdr. N. Rao (Duty Seat 02)</strong></span>
+                </div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    col_btn_sp, col_btn_act1, col_btn_act2 = st.columns([0.6, 0.2, 0.2])
+    with col_btn_act1:
+        if st.button("Flag for Post-Op Review", use_container_width=True):
+            st.toast(f"Incident {selected_rec['incident_id']} flagged for post-incident command audit review.", icon="📋")
+    with col_btn_act2:
+        if st.button("Issue Audio Hailer Warning", type="primary", use_container_width=True):
+            st.toast(f"Acoustic hailer broadcast transmitted on 156.800 MHz at {selected_rec['location_title']}: 'Evacuate low-lying structures immediately.'", icon="📢")
+
 
 
 # ===========================================================================
