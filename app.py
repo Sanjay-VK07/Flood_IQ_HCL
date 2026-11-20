@@ -7,82 +7,95 @@ Follows clean separation of concerns — delegates all logic to backend modules.
 
 from __future__ import annotations
 
-import os
+import html
 from pathlib import Path
-from datetime import datetime, timezone
-import streamlit as st
-import folium
-from streamlit_folium import st_folium
-import plotly.express as px
-import plotly.graph_objects as go
-import pandas as pd
 
+import folium
+import pandas as pd
+import plotly.express as px
+import streamlit as st
+from streamlit_folium import st_folium
+
+from ai_engine import triage_incident
 from config import (
-    APP_TITLE,
-    APP_SUBTITLE,
     APP_ICON,
+    APP_SUBTITLE,
+    APP_TITLE,
+    GEMINI_API_KEY,
+    INCIDENT_CATEGORIES,
     LEVEL_COLORS,
     MAP_CENTER_LAT,
     MAP_CENTER_LNG,
     MAP_DEFAULT_ZOOM,
-    INCIDENT_CATEGORIES,
+    OFFLINE_MODE,
     STATUS_TRANSITIONS,
 )
 from database import (
-    init_db,
-    get_zones,
     create_incident,
-    list_incidents,
     get_incident,
-    get_response_teams,
-    update_incident_workflow,
     get_incident_updates,
+    get_response_teams,
+    get_zones,
+    init_db,
+    list_incidents,
     reset_demo_data,
+    update_incident_workflow,
 )
-from weather import (
-    get_rainfall_for_zones,
-    get_weather_status,
+from response_engine import calculate_priority, recommend_team
+from risk_engine import evaluate_zones, get_risk_summary
+from ui_components import (
+    badge_html,
+    band_from_score,
+    render_map_legend,
+    render_page_header,
+    render_section_heading,
 )
-from risk_engine import (
-    evaluate_zones,
-    get_risk_summary,
-    classify_risk,
-)
-from ai_engine import triage_incident
-from response_engine import (
-    calculate_priority,
-    recommend_team,
-    haversine_distance,
-)
+from weather import get_rainfall_for_zones, get_weather_status
 
 # ---------------------------------------------------------------------------
 # Streamlit Page Setup & Custom CSS
 # ---------------------------------------------------------------------------
 
 st.set_page_config(
-    page_title=f"{APP_TITLE} | Urban Flood Intelligence",
+    page_title=f"{APP_TITLE} | Urban Flood Operations",
     page_icon=APP_ICON,
     layout="wide",
     initial_sidebar_state="expanded",
 )
 
-def _load_css():
+
+def _load_css() -> None:
     css_path = Path(__file__).parent / "assets" / "style.css"
     if css_path.exists():
         with open(css_path, "r", encoding="utf-8") as f:
             st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
 
-_load_css()
 
-# Ensure Database is initialized
+_load_css()
 init_db()
 
 # ---------------------------------------------------------------------------
-# Session State Initialization
+# Session State & Navigation Helpers
 # ---------------------------------------------------------------------------
 
+NAV_OPTIONS = [
+    "Command Center",
+    "Flood Risk Intelligence",
+    "Preparedness",
+    "Citizen Reporting",
+    "Response Control Room",
+    "Incident History",
+    "System Information",
+]
+
+if "nav_option" not in st.session_state or st.session_state["nav_option"] not in NAV_OPTIONS:
+    st.session_state["nav_option"] = NAV_OPTIONS[0]
+
 if "simulated_rain_mm" not in st.session_state:
-    st.session_state["simulated_rain_mm"] = 20.0  # Default to 20mm Normal
+    st.session_state["simulated_rain_mm"] = 20.0
+
+if "rain_slider" not in st.session_state:
+    st.session_state["rain_slider"] = float(st.session_state["simulated_rain_mm"])
 
 if "use_simulation" not in st.session_state:
     st.session_state["use_simulation"] = True
@@ -94,78 +107,105 @@ if "last_submitted_id" not in st.session_state:
     st.session_state["last_submitted_id"] = None
 
 
+def _set_rainfall_preset(mm: float) -> None:
+    st.session_state["simulated_rain_mm"] = float(mm)
+    st.session_state["rain_slider"] = float(mm)
+
+
+def _sync_rain_slider() -> None:
+    st.session_state["simulated_rain_mm"] = float(st.session_state["rain_slider"])
+
+
+def _go_to_control_room(incident_id: str) -> None:
+    st.session_state["selected_incident_id"] = incident_id
+    st.session_state["nav_option"] = "Response Control Room"
+
+
+def _go_to_page(page_name: str) -> None:
+    st.session_state["nav_option"] = page_name
+
+
 # ---------------------------------------------------------------------------
-# Global Sidebar Navigation & Simulation Controls
+# Sidebar Navigation & Rainfall Simulation Controls
 # ---------------------------------------------------------------------------
 
 with st.sidebar:
-    st.markdown(f"## {APP_ICON} {APP_TITLE}")
-    st.caption(APP_SUBTITLE)
-    st.markdown("---")
+    st.markdown(
+        """
+        <div class="sb-brand">
+            <div class="sb-brand-title">FLOODIQ</div>
+            <div class="sb-brand-sub">Hyderabad Operations Pilot</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
+    st.markdown('<div class="sb-section-label">Operations</div>', unsafe_allow_html=True)
     nav_option = st.radio(
         "Navigation",
-        [
-            "1. Command Center",
-            "2. Predict — Flood Risk",
-            "3. Prepare — Readiness",
-            "4. Citizen Reporting",
-            "5. Respond — Control Room",
-            "6. Incident History",
-            "7. System Information",
-        ],
-        index=0,
+        NAV_OPTIONS,
+        key="nav_option",
+        label_visibility="collapsed",
     )
 
     st.markdown("---")
-    st.markdown("### 🌧️ Rainfall Control")
+    st.markdown('<div class="sb-section-label">Rainfall Simulation</div>', unsafe_allow_html=True)
 
-    use_sim = st.toggle("Simulation Mode (Slider)", value=st.session_state["use_simulation"])
-    st.session_state["use_simulation"] = use_sim
+    use_sim = st.toggle("Simulation Mode (Slider)", key="use_simulation")
 
     if use_sim:
-        # Quick Presets
         col_p1, col_p2, col_p3 = st.columns(3)
         with col_p1:
-            if st.button("20mm\nNormal", use_container_width=True):
-                st.session_state["simulated_rain_mm"] = 20.0
-                st.rerun()
+            st.button(
+                "20 mm",
+                help="Normal rainfall scenario (20 mm)",
+                use_container_width=True,
+                on_click=_set_rainfall_preset,
+                args=(20.0,),
+            )
         with col_p2:
-            if st.button("50mm\nModerate", use_container_width=True):
-                st.session_state["simulated_rain_mm"] = 50.0
-                st.rerun()
+            st.button(
+                "50 mm",
+                help="Moderate rainfall scenario (50 mm)",
+                use_container_width=True,
+                on_click=_set_rainfall_preset,
+                args=(50.0,),
+            )
         with col_p3:
-            if st.button("100mm\nCloudburst", use_container_width=True):
-                st.session_state["simulated_rain_mm"] = 100.0
-                st.rerun()
+            st.button(
+                "100 mm",
+                help="Cloudburst rainfall scenario (100 mm)",
+                use_container_width=True,
+                on_click=_set_rainfall_preset,
+                args=(100.0,),
+            )
 
         rain_slider = st.slider(
-            "Rainfall (mm)",
+            "Scenario Rainfall (mm)",
             min_value=0.0,
             max_value=150.0,
-            value=float(st.session_state["simulated_rain_mm"]),
             step=5.0,
-            help="Simulates rainfall over Hyderabad pilot catchment zones in real time.",
+            key="rain_slider",
+            on_change=_sync_rain_slider,
+            help="Simulates rainfall over Hyderabad pilot catchment zones.",
         )
-        st.session_state["simulated_rain_mm"] = rain_slider
-        st.caption(f"Currently simulating **{rain_slider:.0f} mm** rainfall across all zones.")
+        st.session_state["simulated_rain_mm"] = float(rain_slider)
+        st.caption(f"Scenario input: **{rain_slider:.0f} mm** across pilot zones.")
     else:
-        st.info("Using **Live Open-Meteo Weather API** feed.")
+        st.caption("Feed: **Open-Meteo Weather API** (auto-fallback if offline).")
 
     st.markdown("---")
-    # Quick Reset Demo Data
-    if st.button("🔄 Reset Demo Data", help="Restore seeded demo incidents and reset response teams"):
+    st.markdown('<div class="sb-section-label">Demo Controls</div>', unsafe_allow_html=True)
+    if st.button("Reset Demo Data", help="Restore seeded demo incidents and reset response teams", use_container_width=True):
         reset_demo_data()
         st.session_state["selected_incident_id"] = None
         st.session_state["last_submitted_id"] = None
-        st.success("Demo dataset re-seeded!")
+        st.success("Demo dataset restored.")
         st.rerun()
-
-    st.caption("Pilot Scenario: Hyderabad, India")
 
 
 # ---------------------------------------------------------------------------
-# Cached / Prepared Zone Evaluation
+# Shared Operational Context (Zones, Rainfall, Weather Source)
 # ---------------------------------------------------------------------------
 
 zones_data = get_zones()
@@ -173,16 +213,46 @@ sim_val = st.session_state["simulated_rain_mm"] if st.session_state["use_simulat
 rainfall_map = get_rainfall_for_zones(zones_data, simulated_rainfall_mm=sim_val)
 evaluated_zones = evaluate_zones(zones_data, rainfall_map)
 risk_counts = get_risk_summary(evaluated_zones)
-
-# Map zone coordinates for lookup
 zone_coords = {z["zone_id"]: (z["latitude"], z["longitude"]) for z in zones_data}
+zone_name_by_id = {z["zone_id"]: z["zone_name"] for z in zones_data}
+
+sources = {z["rainfall_source"] for z in evaluated_zones}
+if st.session_state["use_simulation"]:
+    rain_label = f"{st.session_state['simulated_rain_mm']:.0f} mm"
+    mode_label = "SIMULATION"
+    mode_tone = "sim"
+    source_desc = f"Simulated ({rain_label})"
+elif "live_open_meteo" in sources:
+    avg_rain = sum(z["rainfall_mm"] for z in evaluated_zones) / max(len(evaluated_zones), 1)
+    rain_label = f"{avg_rain:.1f} mm avg"
+    mode_label = "LIVE · OPEN-METEO"
+    mode_tone = "live"
+    source_desc = "Live Open-Meteo API"
+elif "cached" in sources:
+    avg_rain = sum(z["rainfall_mm"] for z in evaluated_zones) / max(len(evaluated_zones), 1)
+    rain_label = f"{avg_rain:.1f} mm avg"
+    mode_label = "OPEN-METEO (CACHED)"
+    mode_tone = "live"
+    source_desc = "Open-Meteo (Cached)"
+else:
+    avg_rain = sum(z["rainfall_mm"] for z in evaluated_zones) / max(len(evaluated_zones), 1)
+    rain_label = f"{avg_rain:.1f} mm avg"
+    mode_label = "OFFLINE FALLBACK"
+    mode_tone = "fallback"
+    source_desc = "Offline Default Fallback"
 
 
 # ---------------------------------------------------------------------------
-# Helper: Folium Risk Map Generator
+# Helper: Folium Risk, Incident & Unit Map Generator
 # ---------------------------------------------------------------------------
 
-def create_folium_map(zones_evaluated, teams=None, highlight_zone_id=None):
+def create_folium_map(
+    zones_evaluated: list[dict],
+    teams: list[dict] | None = None,
+    incidents: list[dict] | None = None,
+    highlight_zone_id: str | None = None,
+) -> folium.Map:
+    """Build interactive Hyderabad map with zone risk circles, active incidents, and teams."""
     m = folium.Map(
         location=[MAP_CENTER_LAT, MAP_CENTER_LNG],
         zoom_start=MAP_DEFAULT_ZOOM,
@@ -190,50 +260,92 @@ def create_folium_map(zones_evaluated, teams=None, highlight_zone_id=None):
         control_scale=True,
     )
 
-    # Color map for risk levels
-    color_map = {
-        "Low": "green",
-        "Moderate": "orange",
-        "High": "red",
-        "Critical": "darkred",
+    risk_hex = {
+        "Low": "#227752",
+        "Moderate": "#d4940a",
+        "High": "#e06d1b",
+        "Critical": "#c23934",
     }
 
-    # Add zone circles
+    # 1. Zone risk circles
     for z in zones_evaluated:
-        color = color_map.get(z["risk_level"], "blue")
-        is_highlighted = (z["zone_id"] == highlight_zone_id)
+        color = risk_hex.get(z["risk_level"], "#0b7a82")
+        is_highlighted = z["zone_id"] == highlight_zone_id
 
         popup_html = f"""
-        <div style="font-family: sans-serif; min-width: 180px;">
-            <h4 style="margin:0 0 6px 0;">{z['zone_name']}</h4>
-            <b>Risk Score:</b> {z['risk_score']:.1f}/100<br>
-            <b>Risk Level:</b> <span style="color:{LEVEL_COLORS.get(z['risk_level'], '#000')}; font-weight:bold;">{z['risk_level']}</span><br>
-            <b>Rainfall:</b> {z['rainfall_mm']:.1f} mm ({z['rainfall_source']})<br>
-            <b>Drainage Vulnerability:</b> {z['drainage_score']}/100<br>
-            <b>Low-lying Score:</b> {z['low_lying_score']}/100
+        <div style="font-family: Inter, sans-serif; min-width: 210px; font-size: 12px; color: #102530;">
+            <div style="font-size: 14px; font-weight: 700; margin-bottom: 6px;">{html.escape(z['zone_name'])}</div>
+            <div><b>Risk Score:</b> {z['risk_score']:.1f}/100 (<span style="color:{color}; font-weight:700;">{z['risk_level']}</span>)</div>
+            <div><b>Rainfall:</b> {z['rainfall_mm']:.1f} mm ({html.escape(z['rainfall_source'])})</div>
+            <div><b>Drainage Vuln.:</b> {z['drainage_score']}/100</div>
+            <div><b>Low-Lying Score:</b> {z['low_lying_score']}/100</div>
+            <div style="margin-top:4px; color:#5c707a; font-size:11px;">Illustrative scenario risk score</div>
         </div>
         """
 
         folium.CircleMarker(
             location=[z["latitude"], z["longitude"]],
-            radius=16 if is_highlighted else 12,
-            color="black" if is_highlighted else color,
+            radius=22 if is_highlighted else 17,
+            color="#102530" if is_highlighted else color,
             weight=3 if is_highlighted else 2,
             fill=True,
             fill_color=color,
-            fill_opacity=0.75,
-            popup=folium.Popup(popup_html, max_width=300),
-            tooltip=f"{z['zone_name']}: {z['risk_level']} Risk ({z['risk_score']:.0f}/100)",
+            fill_opacity=0.35,
+            popup=folium.Popup(popup_html, max_width=280),
+            tooltip=f"{z['zone_name']} — {z['risk_level']} Risk ({z['risk_score']:.0f}/100)",
         ).add_to(m)
 
-    # Add response teams if provided
+    # 2. Active incident markers (offset slightly from zone center so both remain clickable)
+    if incidents:
+        active_incidents = [i for i in incidents if i["status"] != "Resolved"]
+        zone_seen_count: dict[str, int] = {}
+        for inc in active_incidents:
+            z_id = inc["zone_id"]
+            if z_id not in zone_coords:
+                continue
+            lat, lon = zone_coords[z_id]
+            idx = zone_seen_count.get(z_id, 0)
+            zone_seen_count[z_id] = idx + 1
+            lat_off = lat + 0.0028 * (idx + 1)
+            lon_off = lon - 0.0028 * (idx + 1)
+
+            p_score = inc.get("priority_score", 0)
+            band = band_from_score(p_score)
+            marker_color = "red" if band == "Critical" else ("orange" if band in ("High", "Moderate") else "green")
+            popup_inc = f"""
+            <div style="font-family: Inter, sans-serif; min-width: 210px; font-size: 12px; color: #102530;">
+                <div style="font-weight: 700; font-size: 13px;">{html.escape(inc['incident_id'])} &middot; {html.escape(inc['ai_category'] or inc['reported_category'])}</div>
+                <div><b>Priority:</b> {p_score:.0f}/100 ({band})</div>
+                <div><b>Status:</b> {html.escape(inc['status'])}</div>
+                <div><b>Affected:</b> {inc['people_affected']} person(s)</div>
+                <div><b>Location:</b> {html.escape(inc['location_text'] or zone_name_by_id.get(z_id, z_id))}</div>
+            </div>
+            """
+            folium.Marker(
+                location=[lat_off, lon_off],
+                popup=folium.Popup(popup_inc, max_width=280),
+                tooltip=f"Incident {inc['incident_id']} ({band}, {p_score:.0f}/100)",
+                icon=folium.Icon(color=marker_color, icon="exclamation-triangle", prefix="fa"),
+            ).add_to(m)
+
+    # 3. Illustrative response team markers
     if teams:
         for t in teams:
             status = t.get("status", "Available")
-            icon_color = "blue" if status == "Available" else "gray"
+            icon_color = "cadetblue" if status == "Available" else "gray"
+            base_name = zone_name_by_id.get(t["base_zone"], t["base_zone"].replace("_", " ").title())
+            popup_team = f"""
+            <div style="font-family: Inter, sans-serif; min-width: 190px; font-size: 12px; color: #102530;">
+                <div style="font-weight: 700;">{html.escape(t['team_name'])}</div>
+                <div><b>Specialty:</b> {html.escape(t['specialty'])}</div>
+                <div><b>Base:</b> {html.escape(base_name)}</div>
+                <div><b>Status:</b> {html.escape(status)}</div>
+                <div style="margin-top:4px; color:#5c707a; font-size:11px;">Illustrative demo unit location</div>
+            </div>
+            """
             folium.Marker(
                 location=[t["latitude"], t["longitude"]],
-                popup=f"<b>{t['team_name']}</b><br>Specialty: {t['specialty']}<br>Status: {status}",
+                popup=folium.Popup(popup_team, max_width=260),
                 tooltip=f"{t['team_name']} ({status})",
                 icon=folium.Icon(color=icon_color, icon="shield", prefix="fa"),
             ).add_to(m)
@@ -245,122 +357,154 @@ def create_folium_map(zones_evaluated, teams=None, highlight_zone_id=None):
 # MODULE 1: COMMAND CENTER
 # ===========================================================================
 
-if nav_option == "1. Command Center":
-    rain_label = f"{st.session_state['simulated_rain_mm']:.0f} mm" if st.session_state["use_simulation"] else "Open-Meteo feed"
-    source_label = "SIMULATION" if st.session_state["use_simulation"] else "WEATHER FEED"
-    st.markdown(
-        f"""
-        <section class="ops-hero">
-          <div class="ops-hero-top"><span class="ops-kicker">FLOODIQ · HYDERABAD PILOT</span><span class="ops-live"><i></i> {source_label}</span></div>
-          <div class="ops-hero-main"><div><h1>Emergency operations</h1><p>Turn local risk signals into a clear, operator-approved response.</p></div>
-          <div class="ops-rain"><span>Scenario rainfall</span><strong>{rain_label}</strong><small>Illustrative risk simulation</small></div></div>
-        </section>
-        """,
-        unsafe_allow_html=True,
+if nav_option == "Command Center":
+    render_page_header(
+        title="Emergency Operations Command Center",
+        subtitle="Situational awareness, vulnerability-first incident queue, and operator-approved dispatch.",
+        mode_label=mode_label,
+        mode_tone=mode_tone,
+        right_label="Scenario rainfall",
+        right_value=rain_label,
+        right_note="Illustrative risk simulation",
     )
 
-    # High-level KPIs
     incidents = list_incidents()
     teams = get_response_teams()
+    team_name_by_id = {t["team_id"]: t["team_name"] for t in teams}
 
     total_zones = len(evaluated_zones)
     high_risk_zones = risk_counts.get("High", 0) + risk_counts.get("Critical", 0)
-    active_incidents = len([i for i in incidents if i["status"] not in ("Resolved",)])
-    critical_incidents = len([i for i in incidents if i["priority_score"] >= 75 and i["status"] != "Resolved"])
+    open_incidents = [i for i in incidents if i["status"] != "Resolved"]
+    critical_incidents = [i for i in open_incidents if i["priority_score"] >= 75]
     avail_teams = len([t for t in teams if t["status"] == "Available"])
     assigned_teams = len([t for t in teams if t["status"] == "Assigned"])
-    resolved_incidents = len([i for i in incidents if i["status"] == "Resolved"])
 
-    # KPI Metric Row
     kpi1, kpi2, kpi3, kpi4, kpi5 = st.columns(5)
-    kpi1.metric("Pilot zones", f"{total_zones}")
-    kpi2.metric("Elevated risk", f"{high_risk_zones}", delta="High / critical", delta_color="inverse")
-    kpi3.metric("Open incidents", f"{active_incidents}")
-    kpi4.metric("Critical priority", f"{critical_incidents}", delta="Needs review" if critical_incidents else "Clear", delta_color="inverse")
-    kpi5.metric("Teams available", f"{avail_teams}", delta=f"{assigned_teams} assigned")
+    kpi1.metric("Monitored zones", f"{total_zones}", "Hyderabad pilot")
+    kpi2.metric("Elevated-risk zones", f"{high_risk_zones}", delta="High / critical", delta_color="inverse")
+    kpi3.metric("Open incidents", f"{len(open_incidents)}", f"{len(incidents) - len(open_incidents)} resolved")
+    kpi4.metric("Critical incidents", f"{len(critical_incidents)}", delta="Immediate review" if critical_incidents else "None active", delta_color="inverse")
+    kpi5.metric("Available teams", f"{avail_teams}", f"{assigned_teams} assigned")
 
-    st.markdown("---")
+    st.markdown("<div style='height:0.5rem'></div>", unsafe_allow_html=True)
 
-    # Map + Priority Queue
-    col_map, col_queue = st.columns([1.1, 0.9])
+    col_map, col_queue = st.columns([1.12, 0.88], gap="medium")
 
     with col_map:
-        st.markdown("#### 🗺️ Hyderabad Risk & Unit Deployment Map")
-        sim_badge = "Simulated" if st.session_state["use_simulation"] else "Live Open-Meteo"
-        st.caption(f"Weather Data Source: **{sim_badge}** | Active Rainfall: **{st.session_state['simulated_rain_mm'] if st.session_state['use_simulation'] else 'Live'} mm**")
-        fmap = create_folium_map(evaluated_zones, teams)
-        st_folium(fmap, height=390, use_container_width=True)
+        render_section_heading(
+            "Hyderabad Risk & Incident Map",
+            f"Data source: {source_desc} — risk scores and team locations are illustrative demo data.",
+        )
+        fmap = create_folium_map(evaluated_zones, teams=teams, incidents=incidents)
+        st_folium(fmap, height=420, use_container_width=True, returned_objects=[])
+        render_map_legend([
+            ("Critical Zone", "#c23934"),
+            ("High Zone", "#e06d1b"),
+            ("Moderate Zone", "#d4940a"),
+            ("Low Zone", "#227752"),
+            ("Active Incident", "#dc2626"),
+            ("Response Unit", "#0b7a82"),
+        ])
 
     with col_queue:
-        st.markdown("#### ⚡ Priority Incident Queue (Vulnerability-First)")
-        active_list = [i for i in incidents if i["status"] != "Resolved"]
+        render_section_heading(
+            "Priority Incident Queue",
+            "Ordered by vulnerability-first priority score (highest urgency & vulnerability first).",
+        )
 
-        if not active_list:
-            st.info("No active incidents in queue. All reports resolved or clear.")
+        if not open_incidents:
+            st.info("No open incidents in queue. All reported incidents are resolved.")
         else:
-            for inc in active_list[:5]:
+            for inc in open_incidents[:5]:
                 p_score = inc.get("priority_score", 0)
-                band = "Critical" if p_score >= 75 else ("High" if p_score >= 50 else ("Moderate" if p_score >= 30 else "Low"))
-                badge_class = f"badge-{band.lower()}"
+                band = band_from_score(p_score)
+                zone_label = zone_name_by_id.get(inc["zone_id"], inc["zone_id"].replace("_", " ").title())
+                assigned_label = team_name_by_id.get(inc["assigned_team_id"], inc["assigned_team_id"]) if inc.get("assigned_team_id") else "Unassigned"
+                cat_label = inc["ai_category"] or inc["reported_category"]
 
-                with st.container():
-                    st.markdown(
-                        f"""
-                        <div class="card card-{band.lower()}" style="padding: 12px 16px; margin-bottom: 8px;">
-                            <div style="display:flex; justify-content:space-between; align-items:center;">
-                                <b>{inc['incident_id']} — {inc['ai_category']}</b>
-                                <span class="badge {badge_class}">Priority: {p_score:.0f}/100 ({band})</span>
-                            </div>
-                            <div style="font-size:13px; color:#334155; margin-top:4px;">
-                                📍 <b>{inc['zone_id'].replace('_', ' ').title()}</b>: {inc['location_text'] or 'Location specified in report'}
-                            </div>
-                            <div style="font-size:12px; color:#64748b; margin-top:4px;">
-                                👥 {inc['people_affected']} affected | Status: <b>{inc['status']}</b> | Team: {inc['assigned_team_id'] or 'Unassigned'}
-                            </div>
+                tags = [badge_html(f"Priority {p_score:.0f}/100 ({band})", band.lower())]
+                if inc.get("vulnerable_flag"):
+                    tags.append(badge_html(f"Vulnerable: {inc.get('vulnerable_group', 'Yes')}", "critical"))
+                if inc.get("stranded"):
+                    tags.append(badge_html("Stranded", "high"))
+
+                extra_tags_html = (
+                    f'<div style="margin-top:0.38rem; display:flex; flex-wrap:wrap; gap:0.35rem;">{"".join(tags[1:])}</div>'
+                    if len(tags) > 1
+                    else ""
+                )
+
+                st.markdown(
+                    f"""
+                    <div class="fiq-card fiq-card-{band.lower()}">
+                        <div class="fiq-card-top">
+                            <span class="fiq-card-title">{html.escape(inc['incident_id'])} &middot; {html.escape(cat_label)}</span>
+                            {tags[0]}
                         </div>
-                        """,
-                        unsafe_allow_html=True,
-                    )
-                    c_btn1, c_btn2 = st.columns([1, 1])
-                    with c_btn1:
-                        if st.button(f"Respond to {inc['incident_id']}", key=f"quick_resp_{inc['incident_id']}", use_container_width=True):
-                            st.session_state["selected_incident_id"] = inc["incident_id"]
-                            st.info(f"Selected {inc['incident_id']}. Please switch to '5. Respond — Control Room' in sidebar.")
+                        <div class="fiq-card-loc"><b>{html.escape(zone_label)}</b> &mdash; {html.escape(inc['location_text'] or 'Location specified in report')}</div>
+                        <div class="fiq-card-meta">
+                            <span>Affected: <b>{inc['people_affected']}</b></span>
+                            <span>Status: <b>{html.escape(inc['status'])}</b></span>
+                            <span>Unit: <b>{html.escape(assigned_label)}</b></span>
+                        </div>
+                        {extra_tags_html}
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+                st.button(
+                    f"Review & Dispatch {inc['incident_id']}",
+                    key=f"quick_resp_{inc['incident_id']}",
+                    use_container_width=True,
+                    on_click=_go_to_control_room,
+                    args=(inc["incident_id"],),
+                )
 
 
 # ===========================================================================
-# MODULE 2: PREDICT — FLOOD RISK
+# MODULE 2: FLOOD RISK INTELLIGENCE
 # ===========================================================================
 
-elif nav_option == "2. Predict — Flood Risk":
-    st.markdown("## 🔍 Predict: Flood Risk Intelligence")
-    st.caption("Illustrative scenario risk scoring, not a validated flood forecast. Scores combine rainfall input, drainage capacity, and low-lying vulnerability.")
+elif nav_option == "Flood Risk Intelligence":
+    render_page_header(
+        title="Flood Risk Intelligence",
+        subtitle="Illustrative scenario risk scoring combining rainfall input, drainage capacity, and terrain elevation.",
+        mode_label=mode_label,
+        mode_tone=mode_tone,
+        right_label="Active rainfall",
+        right_value=rain_label,
+        right_note="Heuristic model (not a hydrological forecast)",
+    )
 
-    # Formula Callout
-    with st.expander("📐 Explainable Risk Formula & Heuristic Model", expanded=True):
+    with st.expander("Explainable Risk Formula & Heuristic Model", expanded=False):
         st.markdown(
             r"""
-            **Risk Calculation Heuristic:**
+            **Composite Risk Heuristic (Illustrative Scenario Score):**
             $$\mathbf{R = 0.40 \times P + 0.30 \times D + 0.30 \times L}$$
 
-            - **$\mathbf{P}$ (Rainfall Score, 40% weight):** Normalized rainfall score ($0\text{--}100$), calibrated to $150\text{ mm}$ ceiling.
-            - **$\mathbf{D}$ (Drainage Vulnerability, 30% weight):** Infrastructure drainage constraints ($0\text{--}100$).
-            - **$\mathbf{L}$ (Low-lying Vulnerability, 30% weight):** Topographic elevation and riverine proximity ($0\text{--}100$).
+            - **$\mathbf{P}$ (Rainfall Score, 40% weight):** Normalized rainfall ($0\text{--}100$), calibrated to a $150\text{ mm}$ ceiling.
+            - **$\mathbf{D}$ (Drainage Vulnerability, 30% weight):** Zone storm-drain capacity constraint ($0\text{--}100$).
+            - **$\mathbf{L}$ (Low-Lying Vulnerability, 30% weight):** Topographic elevation and riverine proximity ($0\text{--}100$).
 
-            *Bands: 0–29 Low | 30–49 Moderate | 50–74 High | 75–100 Critical*
+            *Bands: 0–29 Low | 30–49 Moderate | 50–74 High | 75–100 Critical. This is an explainable hackathon heuristic, not a validated hydrological model.*
             """
         )
 
-    # Interactive Map & Breakdown
-    col_m, col_b = st.columns([1.2, 0.8])
+    col_m, col_b = st.columns([1.1, 0.9], gap="medium")
 
     with col_m:
-        st.markdown("#### Pilot Catchment Risk Zones")
+        render_section_heading("Pilot Catchment Risk Zones", f"Source: {source_desc}")
         fmap = create_folium_map(evaluated_zones)
-        st_folium(fmap, height=450, use_container_width=True)
+        st_folium(fmap, height=410, use_container_width=True, returned_objects=[])
+        render_map_legend([
+            ("Critical (75–100)", "#c23934"),
+            ("High (50–74)", "#e06d1b"),
+            ("Moderate (30–49)", "#d4940a"),
+            ("Low (0–29)", "#227752"),
+        ])
 
     with col_b:
-        st.markdown("#### Risk Contribution Breakdown")
+        render_section_heading("Risk Contribution Breakdown", f"Weighted factor contributions ({source_desc})")
         breakdown_data = []
         for z in evaluated_zones:
             bd = z["score_breakdown"]
@@ -376,94 +520,135 @@ elif nav_option == "2. Predict — Flood Risk":
             df_bd,
             x="Zone",
             y=["Rainfall (40%)", "Drainage (30%)", "Low-Lying (30%)"],
-            title=f"Zone Risk Components (Rainfall: {st.session_state['simulated_rain_mm'] if st.session_state['use_simulation'] else 'Live'} mm)",
             barmode="stack",
             color_discrete_map={
-                "Rainfall (40%)": "#0284c7",
-                "Drainage (30%)": "#f97316",
-                "Low-Lying (30%)": "#8b5cf6",
+                "Rainfall (40%)": "#0b7a82",
+                "Drainage (30%)": "#e06d1b",
+                "Low-Lying (30%)": "#3b5b70",
             },
-            height=380,
+            template="plotly_white",
+            height=410,
         )
-        fig.update_layout(margin=dict(l=20, r=20, t=40, b=20), legend=dict(orientation="h", yanchor="bottom", y=1.02))
+        fig.update_layout(
+            margin=dict(l=16, r=16, t=42, b=16),
+            paper_bgcolor="#ffffff",
+            plot_bgcolor="#ffffff",
+            yaxis_title="Risk Contribution (0–100)",
+            xaxis_title="",
+            legend_title_text="",
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
+        )
         st.plotly_chart(fig, use_container_width=True)
 
     st.markdown("---")
-    st.markdown("#### Detailed Zone Risk Comparison Table")
+    render_section_heading("Zone-Wise Risk Comparison", "Sorted highest illustrative risk score first.")
     table_rows = []
     for z in evaluated_zones:
         table_rows.append({
             "Zone": z["zone_name"],
             "Rainfall": f"{z['rainfall_mm']:.1f} mm ({z['rainfall_source']})",
-            "Drainage Score": f"{z['drainage_score']}/100",
+            "Drainage Vuln.": f"{z['drainage_score']}/100",
             "Low-Lying Score": f"{z['low_lying_score']}/100",
-            "Total Risk Score": f"{z['risk_score']:.1f}/100",
-            "Risk Level": z["risk_level"],
-            "Dominant Factors": "; ".join(z["reasons"][:2]),
+            "Illustrative Risk": f"{z['risk_score']:.1f}/100",
+            "Risk Band": z["risk_level"],
+            "Key Drivers": "; ".join(z["reasons"][:2]),
         })
-    st.dataframe(pd.DataFrame(table_rows), use_container_width=True)
+    st.dataframe(pd.DataFrame(table_rows), use_container_width=True, hide_index=True)
 
 
 # ===========================================================================
-# MODULE 3: PREPARE — READINESS
+# MODULE 3: PREPAREDNESS
 # ===========================================================================
 
-elif nav_option == "3. Prepare — Readiness":
-    st.markdown("## 🛡️ Prepare: Dynamic Preparedness Engine")
-    st.caption("Automated emergency checklists triggered dynamically by zone risk level and vulnerable infrastructure indicators.")
+elif nav_option == "Preparedness":
+    render_page_header(
+        title="Zone Preparedness & Readiness",
+        subtitle="Dynamic operational checklists triggered by each zone's current scenario risk band.",
+        mode_label=mode_label,
+        mode_tone=mode_tone,
+        right_label="Active rainfall",
+        right_value=rain_label,
+        right_note="Updates dynamically with rainfall",
+    )
 
     selected_zone_name = st.selectbox(
-        "Select Urban Zone to Inspect Playbook:",
+        "Select Hyderabad Pilot Zone:",
         [z["zone_name"] for z in evaluated_zones],
         index=0,
     )
     zone_match = next(z for z in evaluated_zones if z["zone_name"] == selected_zone_name)
 
     z_col1, z_col2, z_col3 = st.columns(3)
-    z_col1.metric("Calculated Risk Score", f"{zone_match['risk_score']:.1f}/100")
-    z_col2.metric("Risk Level", zone_match["risk_level"])
-    z_col3.metric("Rainfall", f"{zone_match['rainfall_mm']:.1f} mm")
+    z_col1.metric("Illustrative Risk Score", f"{zone_match['risk_score']:.1f}/100")
+    z_col2.metric("Readiness Band", zone_match["risk_level"])
+    z_col3.metric("Scenario Rainfall", f"{zone_match['rainfall_mm']:.1f} mm")
 
-    st.markdown(f"### Preparedness Checklist for **{zone_match['zone_name']}** ({zone_match['risk_level']} Readiness)")
+    st.markdown("<div style='height:0.5rem'></div>", unsafe_allow_html=True)
+    col_list, col_prof = st.columns([1.35, 0.65], gap="medium")
 
-    checklist = zone_match.get("prep_checklist", [])
-    if not checklist:
-        st.info("No specific preparedness actions defined for this risk level.")
-    else:
-        for idx, item in enumerate(checklist, 1):
-            st.markdown(
-                f"""
-                <div class="prep-action-card">
-                    <div class="prep-action-title">☑️ {idx}. {item['action']}</div>
-                    <div class="prep-action-reason"><b>Operational Rationale:</b> {item['reason']}</div>
+    with col_list:
+        render_section_heading(
+            f"Action Checklist — {zone_match['zone_name']}",
+            f"Triggered by {zone_match['risk_level']} risk band.",
+        )
+        checklist = zone_match.get("prep_checklist", [])
+        if not checklist:
+            st.info("No specific preparedness actions defined for this risk level.")
+        else:
+            for idx, item in enumerate(checklist, 1):
+                st.markdown(
+                    f"""
+                    <div class="prep-action-card">
+                        <div class="prep-action-title">{idx}. {html.escape(item['action'])}</div>
+                        <div class="prep-action-reason"><b>Why:</b> {html.escape(item['reason'])}</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+    with col_prof:
+        render_section_heading("Zone Vulnerability Profile", "Static catchment characteristics.")
+        zone_desc = next(
+            (z.get("description", "") for z in zones_data if z["zone_id"] == zone_match["zone_id"]),
+            "Urban residential and commercial catchment area.",
+        )
+        st.markdown(
+            f"""
+            <div class="fiq-card fiq-card-{zone_match['risk_level'].lower()}">
+                <div class="fiq-card-top">
+                    <span class="fiq-card-title">{html.escape(zone_match['zone_name'])}</span>
+                    {badge_html(zone_match['risk_level'], zone_match['risk_level'].lower())}
                 </div>
-                """,
-                unsafe_allow_html=True,
-            )
-
-    st.markdown("---")
-    st.markdown("#### Zone Vulnerability Profile & Infrastructure Description")
-    st.write(zone_match.get("description", "Urban residential and commercial catchment area."))
+                <div class="fiq-card-loc" style="margin-top:0.5rem; line-height:1.45;">{html.escape(zone_desc)}</div>
+                <div class="fiq-card-meta" style="margin-top:0.6rem;">
+                    <span>Drainage: <b>{zone_match['drainage_score']}/100</b></span>
+                    <span>Low-Lying: <b>{zone_match['low_lying_score']}/100</b></span>
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
 
 # ===========================================================================
 # MODULE 4: CITIZEN REPORTING
 # ===========================================================================
 
-elif nav_option == "4. Citizen Reporting":
-    st.markdown("## 📢 Citizen Emergency Incident Reporting")
-    st.caption("Citizen emergency intake with immediate AI triage, vulnerability detection, and control room dispatch ingestion.")
+elif nav_option == "Citizen Reporting":
+    render_page_header(
+        title="Citizen Incident Reporting & Triage",
+        subtitle="Structured intake with AI-assisted triage and deterministic offline fallback.",
+        mode_label=mode_label,
+        mode_tone=mode_tone,
+        right_label="Triage engine",
+        right_value="Gemini AI" if (GEMINI_API_KEY and GEMINI_API_KEY != "your_gemini_api_key_here" and not OFFLINE_MODE) else "Deterministic",
+        right_note="Auto-fallback on API loss",
+    )
 
-    # Demonstration Preset Buttons
-    st.markdown("##### 💡 Load Demonstration Presets:")
+    render_section_heading("Demo Presets", "Load contrasting scenarios to demonstrate vulnerability-first prioritization.")
     col_d1, col_d2 = st.columns(2)
 
-    preset_desc = ""
-    preset_zone = "Musi Riverfront"
-    preset_loc = ""
-    preset_people = 1
-
-    if col_d1.button("📋 Load Incident A (Stranded Elderly — Critical)", use_container_width=True):
+    if col_d1.button("Load Incident A — Stranded Elderly (Critical)", use_container_width=True):
         st.session_state["form_desc"] = (
             "Heavy rain has caused water to enter a residential building near the Musi Riverfront. "
             "Three people are stranded on the first floor, including an elderly person. "
@@ -475,7 +660,7 @@ elif nav_option == "4. Citizen Reporting":
         st.session_state["form_cat"] = "Water Rescue"
         st.rerun()
 
-    if col_d2.button("📋 Load Incident B (Waterlogged Road — Moderate)", use_container_width=True):
+    if col_d2.button("Load Incident B — Waterlogged Road (Moderate)", use_container_width=True):
         st.session_state["form_desc"] = (
             "Road near Ameerpet metro station is partially waterlogged after heavy rain. "
             "Traffic is affected but no vehicles are stuck. Some pedestrians are wading through ankle-deep water."
@@ -490,18 +675,15 @@ elif nav_option == "4. Citizen Reporting":
         desc = st.text_area(
             "Incident Description *",
             value=st.session_state.get("form_desc", ""),
-            placeholder="Describe what is happening, water levels, people trapped or needing help...",
-            height=120,
+            placeholder="Describe what is happening, water depth, and whether anyone is stranded or vulnerable...",
+            height=110,
         )
 
         c_f1, c_f2 = st.columns(2)
         with c_f1:
             zone_names = [z["zone_name"] for z in zones_data]
-            default_zone_idx = 0
-            if "form_zone" in st.session_state and st.session_state["form_zone"] in zone_names:
-                default_zone_idx = zone_names.index(st.session_state["form_zone"])
-
-            selected_zone_name = st.selectbox("Zone *", zone_names, index=default_zone_idx)
+            default_zone_idx = zone_names.index(st.session_state["form_zone"]) if st.session_state.get("form_zone") in zone_names else 0
+            selected_zone_name = st.selectbox("Pilot Zone *", zone_names, index=default_zone_idx)
             location_text = st.text_input(
                 "Specific Landmark / Street Address",
                 value=st.session_state.get("form_loc", ""),
@@ -510,45 +692,34 @@ elif nav_option == "4. Citizen Reporting":
 
         with c_f2:
             people_affected = st.number_input(
-                "Number of People Affected / Stranded",
+                "People Affected / Stranded (if known)",
                 min_value=0,
                 max_value=100,
                 value=int(st.session_state.get("form_people", 1)),
                 step=1,
             )
             cat_list = INCIDENT_CATEGORIES
-            default_cat_idx = 0
-            if "form_cat" in st.session_state and st.session_state["form_cat"] in cat_list:
-                default_cat_idx = cat_list.index(st.session_state["form_cat"])
+            default_cat_idx = cat_list.index(st.session_state["form_cat"]) if st.session_state.get("form_cat") in cat_list else 0
+            reported_category = st.selectbox("Reporter Category (Optional)", cat_list, index=default_cat_idx)
 
-            reported_category = st.selectbox("Incident Category (Optional)", cat_list, index=default_cat_idx)
-
-        submit_report = st.form_submit_button("🚨 Submit Emergency Report", use_container_width=True)
+        submit_report = st.form_submit_button("Submit Emergency Report", type="primary", use_container_width=True)
 
     if submit_report:
         if not desc.strip():
-            st.error("Please provide a valid incident description.")
+            st.error("Please provide an incident description before submitting.")
         else:
-            with st.spinner("Processing report through AI Triage Engine..."):
-                # 1. Match zone_id
+            with st.spinner("Running triage and priority scoring..."):
                 target_zone = next(z for z in zones_data if z["zone_name"] == selected_zone_name)
-                zone_id = target_zone["zone_id"]
-
-                # 2. AI Triage
                 triage_res = triage_incident(
                     description=desc,
                     zone_name=selected_zone_name,
                     location_text=location_text,
                     people_affected=people_affected,
                 )
-
-                # 3. Priority calculation
                 priority_res = calculate_priority(triage_res)
-                p_score = priority_res["priority_score"]
 
-                # 4. Save to Database
                 payload = {
-                    "zone_id": zone_id,
+                    "zone_id": target_zone["zone_id"],
                     "description": desc,
                     "location_text": location_text,
                     "reported_category": reported_category,
@@ -562,64 +733,98 @@ elif nav_option == "4. Citizen Reporting":
                     "immediate_hazard": triage_res["immediate_hazard"],
                     "ai_rationale": triage_res["ai_rationale"],
                     "triage_mode": triage_res["triage_mode"],
-                    "priority_score": p_score,
+                    "priority_score": priority_res["priority_score"],
                     "status": "Triaged",
                 }
-
                 new_id = create_incident(payload)
                 st.session_state["last_submitted_id"] = new_id
                 st.session_state["selected_incident_id"] = new_id
+                st.success(f"Incident **{new_id}** logged and triaged.")
 
-                st.success(f"Emergency Report successfully lodged! Incident Reference ID: **{new_id}**")
-
-    # Display confirmation card if report submitted
     last_id = st.session_state.get("last_submitted_id")
     if last_id:
         inc = get_incident(last_id)
         if inc:
             st.markdown("---")
-            st.markdown(f"### Report Ingestion Summary — `{inc['incident_id']}`")
             p_score = inc.get("priority_score", 0)
-            band = "Critical" if p_score >= 75 else ("High" if p_score >= 50 else ("Moderate" if p_score >= 30 else "Low"))
+            band = band_from_score(p_score)
+            triage_label = (
+                "Gemini AI"
+                if inc["triage_mode"] == "ai"
+                else ("Deterministic Fallback" if inc["triage_mode"] == "fallback" else str(inc["triage_mode"]))
+            )
+            render_section_heading(f"Triage Assessment — {inc['incident_id']}", "Extracted fields and priority score. Reports are not independently verified.")
 
-            col_s1, col_s2 = st.columns([1, 1])
+            col_s1, col_s2 = st.columns([1.1, 0.9], gap="medium")
             with col_s1:
-                st.markdown(f"**AI Classification:** {inc['ai_category']}")
-                st.markdown(f"**Assessed Urgency:** {inc['ai_urgency']}")
-                st.markdown(f"**Triage Mode:** `{inc['triage_mode']}`")
-                st.markdown(f"**Vulnerability Detected:** {'Yes — ' + str(inc['vulnerable_group']) if inc['vulnerable_flag'] else 'None reported'}")
-                st.markdown(f"**Stranded / Trapped:** {'Yes' if inc['stranded'] else 'No'}")
-                st.markdown(f"**Immediate Hazard:** {'Yes' if inc['immediate_hazard'] else 'No'}")
+                flags_html = [
+                    badge_html(f"Mode: {triage_label}", "teal"),
+                    badge_html(f"Urgency: {inc['ai_urgency']}", band.lower()),
+                ]
+                if inc["vulnerable_flag"]:
+                    flags_html.append(badge_html(f"Vulnerable: {inc['vulnerable_group']}", "critical"))
+                if inc["stranded"]:
+                    flags_html.append(badge_html("Stranded", "high"))
+                if inc["unable_to_evacuate"]:
+                    flags_html.append(badge_html("Unable to Evacuate", "high"))
+                if inc["immediate_hazard"]:
+                    flags_html.append(badge_html("Immediate Hazard", "critical"))
+
+                st.markdown(
+                    f"""
+                    <div class="fiq-card fiq-card-{band.lower()}">
+                        <div class="fiq-card-top">
+                            <span class="fiq-card-title">{html.escape(inc['ai_category'])} &middot; {html.escape(zone_name_by_id.get(inc['zone_id'], inc['zone_id']))}</span>
+                            {badge_html(f"Priority {p_score:.0f}/100 ({band})", band.lower())}
+                        </div>
+                        <div class="fiq-card-loc"><b>Triage Rationale:</b> {html.escape(inc['ai_rationale'])}</div>
+                        <div style="margin-top:0.55rem; display:flex; flex-wrap:wrap; gap:0.35rem;">
+                            {''.join(flags_html)}
+                        </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
 
             with col_s2:
-                st.metric("Vulnerability-First Priority Score", f"{p_score:.1f}/100", f"Band: {band}")
-                st.info(f"**AI Rationale:** {inc['ai_rationale']}")
-                if st.button("👉 Proceed to Control Room Response Dispatch", key="goto_dispatch"):
-                    st.session_state["selected_incident_id"] = inc["incident_id"]
-                    st.info("Switching to Respond — Control Room...")
+                st.metric("Vulnerability-First Priority", f"{p_score:.1f}/100", f"Band: {band}")
+                st.button(
+                    "Proceed to Response Control Room",
+                    key="goto_dispatch",
+                    type="primary",
+                    use_container_width=True,
+                    on_click=_go_to_control_room,
+                    args=(inc["incident_id"],),
+                )
 
 
 # ===========================================================================
-# MODULE 5: RESPOND — CONTROL ROOM
+# MODULE 5: RESPONSE CONTROL ROOM
 # ===========================================================================
 
-elif nav_option == "5. Respond — Control Room":
-    st.markdown("## 🎛️ Respond: Emergency Control Room")
-    st.caption("Human-in-the-loop decision platform. AI assists with recommendations; operators hold sole assignment authority.")
+elif nav_option == "Response Control Room":
+    render_page_header(
+        title="Response Control Room",
+        subtitle="Human-in-the-loop dispatch workspace. AI recommends units; operators authorize all assignments.",
+        mode_label=mode_label,
+        mode_tone=mode_tone,
+        right_label="Human control",
+        right_value="Required",
+        right_note="No autonomous dispatch",
+    )
 
     incidents = list_incidents()
     teams = get_response_teams()
+    team_name_by_id = {t["team_id"]: t["team_name"] for t in teams}
 
     if not incidents:
-        st.info("No incidents currently in system.")
+        st.info("No incidents currently in the system.")
     else:
-        # Incident Selector (sorted by priority descending)
         incident_options = {
-            f"{i['incident_id']} | Priority: {i['priority_score']:.0f} | {i['ai_category'] or i['reported_category']} ({i['status']})": i["incident_id"]
+            f"{i['incident_id']} | Priority {i['priority_score']:.0f} | {i['ai_category'] or i['reported_category']} ({i['status']})": i["incident_id"]
             for i in incidents
         }
 
-        # Auto select
         default_index = 0
         if st.session_state.get("selected_incident_id"):
             for idx, inc_id in enumerate(incident_options.values()):
@@ -634,40 +839,40 @@ elif nav_option == "5. Respond — Control Room":
         )
         selected_id = incident_options[selected_label]
         st.session_state["selected_incident_id"] = selected_id
-
         inc = get_incident(selected_id)
 
-        st.markdown("---")
-
-        # Incident Detail View
-        col_info, col_dispatch = st.columns([1.1, 0.9])
+        st.markdown("<div style='height:0.35rem'></div>", unsafe_allow_html=True)
+        col_info, col_dispatch = st.columns([1.05, 0.95], gap="medium")
 
         with col_info:
             p_score = inc.get("operator_priority") or inc.get("priority_score", 0)
-            band = "Critical" if p_score >= 75 else ("High" if p_score >= 50 else ("Moderate" if p_score >= 30 else "Low"))
+            band = band_from_score(p_score)
+            zone_label = zone_name_by_id.get(inc["zone_id"], inc["zone_id"].replace("_", " ").title())
 
-            st.markdown(f"### Incident `{inc['incident_id']}`")
+            render_section_heading(f"Incident Brief — {inc['incident_id']}")
             st.markdown(
                 f"""
-                <div class="card card-{band.lower()}">
-                    <div style="font-size:16px; font-weight:600;">{inc['ai_category'] or inc['reported_category']} — {inc['zone_id'].replace('_', ' ').title()}</div>
-                    <div style="margin-top:8px; font-size:14px; line-height:1.5;">"{inc['description']}"</div>
-                    <div style="margin-top:10px; font-size:13px; color:#64748b;">
-                        📍 <b>Location:</b> {inc['location_text'] or 'N/A'}<br>
-                        👥 <b>Reported Affected:</b> {inc['people_affected']} person(s)<br>
-                        ⚠️ <b>Vulnerable Group:</b> {inc['vulnerable_group'] if inc['vulnerable_flag'] else 'None reported'}<br>
-                        🌊 <b>Immediate Hazard:</b> {'Yes (Rising water / collapse hazard)' if inc['immediate_hazard'] else 'No'}<br>
-                        🚪 <b>Stranded / Unable to Evacuate:</b> {'Yes' if inc['stranded'] else 'No'}<br>
-                        🤖 <b>Triage Mode:</b> {inc['triage_mode']}
+                <div class="fiq-card fiq-card-{band.lower()}">
+                    <div class="fiq-card-top">
+                        <span class="fiq-card-title">{html.escape(inc['ai_category'] or inc['reported_category'])} &middot; {html.escape(zone_label)}</span>
+                        {badge_html(f"Priority {p_score:.0f}/100 ({band})", band.lower())}
+                    </div>
+                    <div class="fiq-card-loc" style="margin-top:0.45rem; line-height:1.5;">"{html.escape(inc['description'])}"</div>
+                    <div class="fiq-card-meta" style="margin-top:0.55rem;">
+                        <span>Location: <b>{html.escape(inc['location_text'] or 'N/A')}</b></span>
+                        <span>Affected: <b>{inc['people_affected']}</b></span>
+                        <span>Vulnerable: <b>{html.escape(inc['vulnerable_group'] if inc['vulnerable_flag'] else 'None reported')}</b></span>
+                        <span>Stranded: <b>{'Yes' if inc['stranded'] else 'No'}</b></span>
+                        <span>Hazard: <b>{'Yes' if inc['immediate_hazard'] else 'No'}</b></span>
+                        <span>Triage: <b>{html.escape(str(inc['triage_mode']))}</b></span>
                     </div>
                 </div>
                 """,
                 unsafe_allow_html=True,
             )
 
-            st.markdown(f"**AI Rationale:** {inc['ai_rationale']}")
+            st.caption(f"**Triage Rationale:** {inc['ai_rationale']}")
 
-            # Priority Breakdown display
             priority_calc = calculate_priority({
                 "ai_category": inc["ai_category"],
                 "ai_urgency": inc["ai_urgency"],
@@ -678,53 +883,85 @@ elif nav_option == "5. Respond — Control Room":
                 "immediate_hazard": inc["immediate_hazard"],
             })
 
-            with st.expander("📊 Priority Score Breakdown (Vulnerability-First)", expanded=True):
+            with st.expander("Priority Score Breakdown (Vulnerability-First)", expanded=True):
                 factors = priority_calc["factors"]
                 p_df = pd.DataFrame([
-                    {"Factor": "Severity (S, 30%)", "Raw Score": factors["severity"]["score"], "Weighted Contribution": factors["severity"]["contribution"]},
-                    {"Factor": "Stranded / Trapped (T, 25%)", "Raw Score": factors["stranded"]["score"], "Weighted Contribution": factors["stranded"]["contribution"]},
-                    {"Factor": "Vulnerability (V, 25%)", "Raw Score": factors["vulnerability"]["score"], "Weighted Contribution": factors["vulnerability"]["contribution"]},
-                    {"Factor": "People Count (N, 10%)", "Raw Score": factors["people_affected"]["score"], "Weighted Contribution": factors["people_affected"]["contribution"]},
-                    {"Factor": "Hazard (H, 10%)", "Raw Score": factors["hazard"]["score"], "Weighted Contribution": factors["hazard"]["contribution"]},
+                    {"Factor": "Severity (S, 30%)", "Raw": factors["severity"]["score"], "Contribution": factors["severity"]["contribution"]},
+                    {"Factor": "Stranded / Trapped (T, 25%)", "Raw": factors["stranded"]["score"], "Contribution": factors["stranded"]["contribution"]},
+                    {"Factor": "Vulnerability (V, 25%)", "Raw": factors["vulnerability"]["score"], "Contribution": factors["vulnerability"]["contribution"]},
+                    {"Factor": "People Count (N, 10%)", "Raw": factors["people_affected"]["score"], "Contribution": factors["people_affected"]["contribution"]},
+                    {"Factor": "Immediate Hazard (H, 10%)", "Raw": factors["hazard"]["score"], "Contribution": factors["hazard"]["contribution"]},
                 ])
-                st.dataframe(p_df, use_container_width=True)
-                st.caption(f"Calculated Score: **{inc['priority_score']:.1f}/100** | Band: **{band}**")
+                st.dataframe(p_df, use_container_width=True, hide_index=True)
+                st.caption(f"Total Score: **{inc['priority_score']:.1f}/100** | Band: **{band}**")
 
         with col_dispatch:
-            st.markdown("### 🚒 Response Unit Recommendation")
+            render_section_heading("Response Unit Recommendation", "Team locations and availability are illustrative demo data.")
 
-            # Run recommendation engine
             rec = recommend_team(inc, teams, zone_coords=zone_coords)
             recommended_team = rec.get("recommended_team")
 
             if recommended_team:
-                st.success(f"🎯 **Top Recommended Unit:** {recommended_team['team_name']}")
-                st.markdown(f"**Specialty:** `{recommended_team['specialty']}` | **Base:** `{recommended_team['base_zone']}`")
-                st.markdown(f"**Proximity:** {rec['distance_desc']}")
-                st.caption(f"**Suitability Analysis:** {rec['match_reason']}")
+                rec_base = zone_name_by_id.get(recommended_team["base_zone"], recommended_team["base_zone"].replace("_", " ").title())
+                st.markdown(
+                    f"""
+                    <div class="fiq-card" style="border-left-color: var(--teal);">
+                        <div class="fiq-card-top">
+                            <span class="fiq-card-title">Recommended: {html.escape(recommended_team['team_name'])}</span>
+                            {badge_html(f"Match {rec.get('match_score', 0):.1f}/100", "teal")}
+                        </div>
+                        <div class="fiq-card-meta" style="margin-top:0.35rem;">
+                            <span>Specialty: <b>{html.escape(recommended_team['specialty'])}</b></span>
+                            <span>Base: <b>{html.escape(rec_base)}</b></span>
+                            <span>Distance: <b>{html.escape(rec['distance_desc'])}</b></span>
+                        </div>
+                        <div class="fiq-card-loc" style="margin-top:0.35rem; font-size:0.76rem; color:var(--muted);">
+                            {html.escape(rec['match_reason'])}
+                        </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+                alternatives = rec.get("alternatives", [])
+                if alternatives:
+                    with st.expander(f"Compare All Available Units ({len(alternatives) + 1})"):
+                        alt_rows = [{
+                            "Unit": recommended_team["team_name"],
+                            "Specialty": recommended_team["specialty"],
+                            "Base Zone": rec_base,
+                            "Distance": rec["distance_desc"],
+                            "Match Score": f"{rec.get('match_score', 0):.1f}/100",
+                        }]
+                        for alt in alternatives:
+                            t_alt = alt["team"]
+                            alt_rows.append({
+                                "Unit": t_alt["team_name"],
+                                "Specialty": t_alt["specialty"],
+                                "Base Zone": zone_name_by_id.get(t_alt["base_zone"], t_alt["base_zone"].replace("_", " ").title()),
+                                "Distance": alt["distance_desc"],
+                                "Match Score": f"{alt['match_score']:.1f}/100",
+                            })
+                        st.dataframe(pd.DataFrame(alt_rows), use_container_width=True, hide_index=True)
             else:
                 st.warning(rec["match_reason"])
 
             st.markdown("---")
-            st.markdown("#### ✍️ Human Operator Dispatch Decision")
+            render_section_heading("Operator Dispatch Authorization", f"Current workflow status: {inc['status']}")
 
             current_status = inc["status"]
-            allowed_next = STATUS_TRANSITIONS.get(current_status, [])
-
-            st.markdown(f"Current Workflow Status: **`{current_status}`**")
-
-            # Team selection for assignment
             available_teams = [t for t in teams if t["status"] == "Available"]
 
             if current_status in ("Triaged", "In Review"):
-                # Transition to In Review if currently Triaged
                 if current_status == "Triaged":
                     if st.button("Mark 'In Review' (Operator Acknowledged)", use_container_width=True):
                         update_incident_workflow(inc["incident_id"], "In Review", note="Operator took ownership for dispatch review.")
                         st.rerun()
 
-                # Team assignment form
-                team_choices = {f"{t['team_name']} ({t['specialty']}) — Base: {t['base_zone']}": t["team_id"] for t in available_teams}
+                team_choices = {
+                    f"{t['team_name']} ({t['specialty']}) — {zone_name_by_id.get(t['base_zone'], t['base_zone'].replace('_', ' ').title())}": t["team_id"]
+                    for t in available_teams
+                }
 
                 if recommended_team and recommended_team["team_id"] in [t["team_id"] for t in available_teams]:
                     rec_label = [k for k, v in team_choices.items() if v == recommended_team["team_id"]][0]
@@ -733,33 +970,44 @@ elif nav_option == "5. Respond — Control Room":
                     rec_idx = 0
 
                 selected_team_label = st.selectbox(
-                    "Choose Response Team to Dispatch:",
+                    "Select Response Unit to Dispatch:",
                     list(team_choices.keys()) if team_choices else ["No teams available"],
                     index=rec_idx if team_choices else 0,
                     disabled=not team_choices,
                 )
 
-                op_note = st.text_input("Operator Dispatch Order / Field Note", placeholder="e.g. Deploy with inflatable rescue boat and medical kit")
+                op_note = st.text_input(
+                    "Operator Dispatch Order / Note",
+                    placeholder="e.g. Deploy with inflatable rescue boat and medical kit",
+                )
 
-                if st.button("✅ Approve & Dispatch Selected Team", type="primary", use_container_width=True, disabled=not team_choices):
+                if st.button("Approve & Dispatch Selected Team", type="primary", use_container_width=True, disabled=not team_choices):
                     chosen_team_id = team_choices[selected_team_label]
+                    chosen_team_name = team_name_by_id.get(chosen_team_id, chosen_team_id)
                     try:
+                        if current_status == "Triaged":
+                            update_incident_workflow(
+                                incident_id=inc["incident_id"],
+                                new_status="In Review",
+                                note="Operator reviewed incident for dispatch.",
+                            )
                         update_incident_workflow(
                             incident_id=inc["incident_id"],
                             new_status="Team Assigned",
                             assigned_team_id=chosen_team_id,
-                            note=op_note or f"Assigned team {chosen_team_id} by operator.",
+                            note=op_note or f"Operator approved dispatch of {chosen_team_name} ({chosen_team_id}).",
                         )
-                        st.success(f"Team {chosen_team_id} assigned successfully!")
+                        st.success(f"{chosen_team_name} assigned successfully.")
                         st.rerun()
                     except Exception as e:
                         st.error(f"Dispatch failed: {e}")
 
             elif current_status == "Team Assigned":
-                st.info(f"Team **{inc['assigned_team_id']}** is currently assigned to this incident.")
+                assigned_name = team_name_by_id.get(inc["assigned_team_id"], inc["assigned_team_id"])
+                st.info(f"**{assigned_name}** (`{inc['assigned_team_id']}`) is assigned to this incident.")
                 c_act1, c_act2 = st.columns(2)
                 with c_act1:
-                    if st.button("Mark 'In Progress'", use_container_width=True):
+                    if st.button("Mark 'In Progress'", type="primary", use_container_width=True):
                         update_incident_workflow(inc["incident_id"], "In Progress", note="Team on-site and rescue operation underway.")
                         st.rerun()
                 with c_act2:
@@ -768,32 +1016,48 @@ elif nav_option == "5. Respond — Control Room":
                         st.rerun()
 
             elif current_status == "In Progress":
-                st.info("Emergency response in active progress on ground.")
-                res_note = st.text_input("Resolution Report Note", placeholder="e.g. All 3 residents safely evacuated to dry shelter.")
-                if st.button("🏁 Mark Incident Resolved", type="primary", use_container_width=True):
-                    update_incident_workflow(inc["incident_id"], "Resolved", note=res_note or "Incident successfully resolved.")
-                    st.success("Incident resolved and team returned to Available status!")
+                st.info("Emergency response is actively underway.")
+                res_note = st.text_input("Resolution Note", placeholder="e.g. All 3 residents safely evacuated.")
+                if st.button("Mark Incident Resolved", type="primary", use_container_width=True):
+                    update_incident_workflow(inc["incident_id"], "Resolved", note=res_note or "Incident resolved.")
+                    st.success("Incident resolved and team released to Available status.")
                     st.rerun()
 
             elif current_status == "Resolved":
-                st.success("This incident has been marked as Resolved. Response team has been released back to Available duty.")
+                st.success("Incident is Resolved. Assigned response team has been released back to Available duty.")
+
+            st.button(
+                "View Audit Timeline in Incident History",
+                key="goto_history_from_dispatch",
+                use_container_width=True,
+                on_click=_go_to_page,
+                args=("Incident History",),
+            )
 
 
 # ===========================================================================
 # MODULE 6: INCIDENT HISTORY
 # ===========================================================================
 
-elif nav_option == "6. Incident History":
-    st.markdown("## 📜 Incident Audit Trail & History")
-    st.caption("Immutable transaction history of all emergency reports, priority adjustments, dispatch decisions, and resolutions.")
+elif nav_option == "Incident History":
+    render_page_header(
+        title="Incident Audit Trail & History",
+        subtitle="Chronological transaction log of reports, operator reviews, dispatches, and resolutions.",
+        mode_label=mode_label,
+        mode_tone=mode_tone,
+    )
 
     all_incidents = list_incidents()
+    teams = get_response_teams()
+    team_name_by_id = {t["team_id"]: t["team_name"] for t in teams}
 
     col_flt1, col_flt2 = st.columns(2)
     with col_flt1:
         status_flt = st.selectbox("Filter by Status:", ["All"] + list(STATUS_TRANSITIONS.keys()))
     with col_flt2:
-        zone_flt = st.selectbox("Filter by Zone:", ["All"] + [z["zone_id"] for z in zones_data])
+        zone_flt_options = {"All": "All"} | {z["zone_name"]: z["zone_id"] for z in zones_data}
+        zone_flt_label = st.selectbox("Filter by Zone:", list(zone_flt_options.keys()))
+        zone_flt = zone_flt_options[zone_flt_label]
 
     filtered = all_incidents
     if status_flt != "All":
@@ -801,75 +1065,98 @@ elif nav_option == "6. Incident History":
     if zone_flt != "All":
         filtered = [i for i in filtered if i["zone_id"] == zone_flt]
 
-    st.markdown(f"Showing **{len(filtered)}** incident(s):")
+    st.caption(f"Showing **{len(filtered)}** incident(s), ordered by priority.")
 
-    for inc in filtered:
-        with st.expander(f"Incident {inc['incident_id']} — {inc['ai_category']} ({inc['status']}) — Priority {inc['priority_score']:.0f}/100"):
-            st.markdown(f"**Zone:** {inc['zone_id']} | **Location:** {inc['location_text']}")
-            st.markdown(f"**Description:** {inc['description']}")
-            st.markdown(f"**Assigned Team:** {inc['assigned_team_id'] or 'None'}")
-            st.markdown(f"**Logged At:** {inc['created_at']}")
+    if not filtered:
+        st.info("No incidents match the selected filters.")
+    else:
+        for inc in filtered:
+            z_label = zone_name_by_id.get(inc["zone_id"], inc["zone_id"].replace("_", " ").title())
+            t_label = team_name_by_id.get(inc["assigned_team_id"], inc["assigned_team_id"]) if inc.get("assigned_team_id") else "None"
+            created_disp = inc["created_at"][:19].replace("T", " ") + " UTC" if inc.get("created_at") else "N/A"
+            cat_label = inc["ai_category"] or inc["reported_category"]
 
-            st.markdown("##### ⏱️ Audit Updates Timeline:")
-            updates = get_incident_updates(inc["incident_id"])
-            for u in updates:
-                st.markdown(
-                    f"""
-                    <div class="timeline-item">
-                        <span class="timeline-time">{u['updated_at']}</span><br>
-                        <b>Transition:</b> {u['old_status'] or 'None'} ➔ <b>{u['new_status']}</b><br>
-                        <span style="font-size:13px; color:#475569;">📝 {u['note']}</span>
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
+            with st.expander(f"{inc['incident_id']} — {cat_label} | {inc['status']} | Priority {inc['priority_score']:.0f}/100"):
+                st.markdown(f"**Zone:** {z_label} | **Location:** {inc['location_text'] or 'N/A'}")
+                st.markdown(f"**Description:** {inc['description']}")
+                st.markdown(f"**Assigned Team:** {t_label} | **Logged:** {created_disp}")
+
+                st.markdown("**Chronological Audit Timeline**")
+                updates = get_incident_updates(inc["incident_id"])
+                for u in updates:
+                    u_time = u["updated_at"][:19].replace("T", " ") + " UTC" if u.get("updated_at") else ""
+                    old_s = html.escape(u["old_status"] or "Created")
+                    new_s = html.escape(u["new_status"] or "")
+                    note_s = html.escape(u["note"] or "")
+                    st.markdown(
+                        f"""
+                        <div class="timeline-item">
+                            <span class="timeline-time">{u_time}</span><br>
+                            <b>{old_s} &rarr; {new_s}</b><br>
+                            <span style="font-size:0.8rem; color:var(--ink-2);">{note_s}</span>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
 
 
 # ===========================================================================
 # MODULE 7: SYSTEM INFORMATION
 # ===========================================================================
 
-elif nav_option == "7. System Information":
-    st.markdown("## ⚙️ System Status & Technical Diagnostics")
-    st.caption("Architecture overview, API connectivity, and technical judging documentation.")
+elif nav_option == "System Information":
+    render_page_header(
+        title="System Diagnostics & Architecture",
+        subtitle="Live service status, offline fallback guarantees, scoring formulas, and prototype scope.",
+        mode_label=mode_label,
+        mode_tone=mode_tone,
+    )
 
     col_w, col_ai, col_db = st.columns(3)
 
-    # Weather status
     w_status = get_weather_status()
     with col_w:
-        st.markdown("#### ☁️ Weather Service")
+        st.markdown("#### Weather Feed")
         if w_status["connected"]:
             st.success(f"Connected (Open-Meteo)\nLatency: {w_status['latency_ms']} ms")
         else:
-            st.warning(f"Offline / Fallback\n{w_status.get('error', 'Using simulated/cache')}")
+            st.warning(f"Offline / Fallback\n{w_status.get('error', 'Using simulated/default fallback')}")
 
-    # AI status
     with col_ai:
-        st.markdown("#### 🧠 AI Triage Engine")
-        gemini_key_present = bool(os.getenv("GEMINI_API_KEY"))
-        if gemini_key_present and not os.getenv("OFFLINE_MODE", "").lower() in ("true", "1"):
+        st.markdown("#### AI Triage Engine")
+        gemini_key_present = bool(GEMINI_API_KEY and GEMINI_API_KEY != "your_gemini_api_key_here")
+        if gemini_key_present and not OFFLINE_MODE:
             st.success("Google Gemini API: Active\nModel: gemini-2.0-flash")
         else:
-            st.info("Deterministic Fallback: Active\n(Zero external API dependencies)")
+            st.info("Deterministic Fallback: Active\nRule-based triage with identical output schema")
 
-    # DB status
     with col_db:
-        st.markdown("#### 🗄️ Database Engine")
+        st.markdown("#### Persistence Engine")
         all_inc = list_incidents()
         teams = get_response_teams()
-        st.success(f"SQLite (WAL Mode)\nIncidents: {len(all_inc)} | Teams: {len(teams)}")
+        st.success(f"SQLite (WAL Mode)\nIncidents: {len(all_inc)} | Demo Teams: {len(teams)}")
 
     st.markdown("---")
+    col_arch, col_lim = st.columns(2, gap="medium")
 
-    st.markdown("### 🏆 Technical Judging Brief & Explainability Notes")
-    st.markdown(
-        """
-        1. **Explainable Risk Heuristic:** Zone risk calculation uses a transparent formula $\mathbf{R = 0.40P + 0.30D + 0.30L}$. It separates rainfall input from static topographical & drainage vulnerability.
-        2. **Vulnerability-First Priority Engine:** Incident ranking does not rely on timestamp queue order. It computes priority $\mathbf{I = 0.30S + 0.25T + 0.25V + 0.10N + 0.10H}$, guaranteeing that stranded elderly citizens (Incident A, ~92) receive priority over general waterlogged traffic (Incident B, ~48).
-        3. **Deterministic Fallback Triage:** When external cloud APIs encounter rate limits, timeouts, or network loss, the system automatically falls back to an internal deterministic triage ruleset that outputs the exact same schema.
-        4. **Human-in-the-Loop Safeguards:** AI assists with categorization and suitability matching, but response units are **never dispatched autonomously**. All deployments require affirmative human operator authorization.
-        5. **Transaction Integrity:** Response unit assignment uses SQLite database transactions ensuring a team cannot be double-assigned to concurrent incidents.
-        6. **Prototype Disclaimer:** Hydrological risk scores and response team locations are illustrative prototype models developed for hackathon demonstration. Production deployment would integrate municipal GIS layers and official dispatch channels.
-        """
-    )
+    with col_arch:
+        render_section_heading("Scoring & Triage Architecture")
+        st.markdown(
+            r"""
+            - **Explainable Risk Heuristic:** $\mathbf{R = 0.40P + 0.30D + 0.30L}$ combines normalized rainfall ($P$), drainage vulnerability ($D$), and low-lying terrain ($L$).
+            - **Vulnerability-First Priority:** $\mathbf{I = 0.30S + 0.25T + 0.25V + 0.10N + 0.10H}$ ensures stranded or vulnerable citizens outrank general traffic waterlogging.
+            - **Offline Resilience:** Missing API keys, network loss, or malformed responses automatically fall back to deterministic triage and cached/default rainfall.
+            - **Transaction Integrity:** SQLite transactions prevent duplicate team assignments and enforce valid status transitions.
+            """
+        )
+
+    with col_lim:
+        render_section_heading("Prototype Scope & Limitations")
+        st.markdown(
+            """
+            - **Illustrative Risk Scores:** The risk formula is an explainable hackathon heuristic, not a validated hydrological or flood-probability model.
+            - **Simulated Inputs:** Scenario rainfall values are operator-controlled simulation inputs, not real-time gauge observations.
+            - **Demo Unit Data:** Response team locations, specialties, and availability are illustrative demonstration data.
+            - **Human-in-the-Loop:** AI assists with triage and unit matching, but human operators hold sole dispatch authority. Citizen reports are not independently verified.
+            """
+        )
